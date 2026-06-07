@@ -1,0 +1,98 @@
+[debug] [2026-06-07T23:40:55.034Z] ----------------------------------------------------------------------
+[debug] [2026-06-07T23:40:55.046Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\PC HP 14-DY0005LA\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js deploy
+[debug] [2026-06-07T23:40:55.047Z] CLI Version:   15.19.1
+[debug] [2026-06-07T23:40:55.047Z] Platform:      win32
+[debug] [2026-06-07T23:40:55.047Z] Node Version:  v24.16.0
+[debug] [2026-06-07T23:40:55.047Z] Time:          Sun Jun 07 2026 18:40:55 GMT-0500 (hora estándar de Colombia)
+[debug] [2026-06-07T23:40:55.047Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-06-07T23:40:57.689Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-06-07T23:40:57.690Z] > authorizing via signed-in user (perezmezanancy1@gmail.com)
+[debug] [2026-06-07T23:40:57.690Z] [iam] checking project torniquete-universidad for permissions ["firebase.projects.get","firebasehosting.sites.update"]
+[debug] [2026-06-07T23:40:57.691Z] Checked if tokens are valid: true, expires at: 1780877861003
+[debug] [2026-06-07T23:40:57.691Z] Checked if tokens are valid: true, expires at: 1780877861003
+[debug] [2026-06-07T23:40:57.692Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/torniquete-universidad:testIamPermissions [none]
+[debug] [2026-06-07T23:40:57.692Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/torniquete-universidad:testIamPermissions  x-goog-user-project=torniquete-universidad
+[debug] [2026-06-07T23:40:57.692Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/torniquete-universidad:testIamPermissions {"permissions":["firebase.projects.get","firebasehosting.sites.update"]}
+[debug] [2026-06-07T23:40:58.006Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/torniquete-universidad:testIamPermissions 200
+[debug] [2026-06-07T23:40:58.007Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/torniquete-universidad:testIamPermissions {"permissions":["firebase.projects.get","firebasehosting.sites.update"]}
+[debug] [2026-06-07T23:40:58.007Z] Checked if tokens are valid: true, expires at: 1780877861003
+[debug] [2026-06-07T23:40:58.008Z] Checked if tokens are valid: true, expires at: 1780877861003
+[debug] [2026-06-07T23:40:58.008Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/torniquete-universidad [none]
+[debug] [2026-06-07T23:40:58.455Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/torniquete-universidad 200
+[debug] [2026-06-07T23:40:58.455Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/torniquete-universidad {"projectId":"torniquete-universidad","projectNumber":"573659821443","displayName":"torniquete-universidad","name":"projects/torniquete-universidad","resources":{"hostingSite":"torniquete-universidad","realtimeDatabaseInstance":"torniquete-universidad-default-rtdb"},"state":"ACTIVE","etag":"1_5e2dd1d5-fcb4-4937-a9b7-63a4f40d9c48"}
+[info] 
+[info] === Deploying to 'torniquete-universidad'...
+[info] 
+[info] i  deploying hosting 
+[debug] [2026-06-07T23:40:58.460Z] Checked if tokens are valid: true, expires at: 1780877861003
+[debug] [2026-06-07T23:40:58.461Z] Checked if tokens are valid: true, expires at: 1780877861003
+[debug] [2026-06-07T23:40:58.461Z] >>> [apiv2][query] GET https://firebasehosting.googleapis.com/v1beta1/projects/torniquete-universidad/sites/torniquete-universidad [none]
+[debug] [2026-06-07T23:40:59.580Z] <<< [apiv2][status] GET https://firebasehosting.googleapis.com/v1beta1/projects/torniquete-universidad/sites/torniquete-universidad 200
+[debug] [2026-06-07T23:40:59.580Z] <<< [apiv2][body] GET https://firebasehosting.googleapis.com/v1beta1/projects/torniquete-universidad/sites/torniquete-universidad {"name":"projects/torniquete-universidad/sites/torniquete-universidad","defaultUrl":"https://torniquete-universidad.web.app","type":"DEFAULT_SITE"}
+[debug] [2026-06-07T23:40:59.584Z] Checked if tokens are valid: true, expires at: 1780877861003
+[debug] [2026-06-07T23:40:59.584Z] Checked if tokens are valid: true, expires at: 1780877861003
+[debug] [2026-06-07T23:40:59.584Z] >>> [apiv2][query] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/torniquete-universidad/versions [none]
+[debug] [2026-06-07T23:40:59.584Z] >>> [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/torniquete-universidad/versions {"status":"CREATED","labels":{"deployment-tool":"cli-firebase"}}
+[debug] [2026-06-07T23:41:00.579Z] <<< [apiv2][status] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/torniquete-universidad/versions 200
+[debug] [2026-06-07T23:41:00.579Z] <<< [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/torniquete-universidad/versions {"name":"projects/573659821443/sites/torniquete-universidad/versions/28ea433c36b64227","status":"CREATED","config":{},"labels":{"deployment-tool":"cli-firebase"}}
+[info] i  hosting[torniquete-universidad]: beginning deploy... 
+[info] i  hosting[torniquete-universidad]: found 2 files in public 
+[debug] [2026-06-07T23:41:00.591Z] [hosting] uploading with 200 concurrency
+[debug] [2026-06-07T23:41:00.596Z] Checked if tokens are valid: true, expires at: 1780877861003
+[debug] [2026-06-07T23:41:00.596Z] Checked if tokens are valid: true, expires at: 1780877861003
+[debug] [2026-06-07T23:41:00.599Z] [hosting] hash cache [cHVibGlj] stored for 2 files
+[debug] [2026-06-07T23:41:00.599Z] [hosting][hash queue][FINAL] {"max":1,"min":1,"avg":1,"active":0,"complete":2,"success":2,"errored":0,"retried":0,"total":2,"elapsed":4}
+[debug] [2026-06-07T23:41:00.599Z] >>> [apiv2][query] POST https://firebasehosting.googleapis.com/v1beta1/projects/573659821443/sites/torniquete-universidad/versions/28ea433c36b64227:populateFiles [none]
+[debug] [2026-06-07T23:41:00.599Z] >>> [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/573659821443/sites/torniquete-universidad/versions/28ea433c36b64227:populateFiles {"files":{"/index.html":"2d2b0c813628a70bd46d4e7ccc22c7b650055109ba37923dd6adf82a3fa68b7e","/404.html":"762bf484ba67404bd1a3b181546ea28d60dfddf18e9dd4795d8d25bcf3c1a890"}}
+[debug] [2026-06-07T23:41:01.178Z] <<< [apiv2][status] POST https://firebasehosting.googleapis.com/v1beta1/projects/573659821443/sites/torniquete-universidad/versions/28ea433c36b64227:populateFiles 200
+[debug] [2026-06-07T23:41:01.178Z] <<< [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/573659821443/sites/torniquete-universidad/versions/28ea433c36b64227:populateFiles {"uploadUrl":"https://upload-firebasehosting.googleapis.com/upload/sites/torniquete-universidad/versions/28ea433c36b64227/files"}
+[debug] [2026-06-07T23:41:01.178Z] [hosting][populate queue][FINAL] {"max":582,"min":582,"avg":582,"active":0,"complete":1,"success":1,"errored":0,"retried":0,"total":1,"elapsed":582}
+[debug] [2026-06-07T23:41:01.179Z] [hosting] uploads queued: 0
+[debug] [2026-06-07T23:41:01.179Z] [hosting][upload queue][FINAL] {"max":0,"min":9999999999,"avg":0,"active":0,"complete":0,"success":0,"errored":0,"retried":0,"total":0,"elapsed":1780875661179}
+[info] +  hosting[torniquete-universidad]: file upload complete 
+[debug] [2026-06-07T23:41:01.182Z] [hosting] deploy completed after 601ms
+[debug] [2026-06-07T23:41:01.183Z] [
+  {
+    "config": {
+      "public": "public",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "site": "torniquete-universidad"
+    },
+    "version": "projects/573659821443/sites/torniquete-universidad/versions/28ea433c36b64227"
+  }
+]
+[info] i  hosting[torniquete-universidad]: finalizing version... 
+[debug] [2026-06-07T23:41:01.185Z] Checked if tokens are valid: true, expires at: 1780877861003
+[debug] [2026-06-07T23:41:01.185Z] Checked if tokens are valid: true, expires at: 1780877861003
+[debug] [2026-06-07T23:41:01.185Z] >>> [apiv2][query] PATCH https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/torniquete-universidad/versions/28ea433c36b64227 updateMask=status%2Cconfig
+[debug] [2026-06-07T23:41:01.185Z] >>> [apiv2][body] PATCH https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/torniquete-universidad/versions/28ea433c36b64227 {"status":"FINALIZED","config":{}}
+[debug] [2026-06-07T23:41:01.797Z] <<< [apiv2][status] PATCH https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/torniquete-universidad/versions/28ea433c36b64227 200
+[debug] [2026-06-07T23:41:01.797Z] <<< [apiv2][body] PATCH https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/torniquete-universidad/versions/28ea433c36b64227 {"name":"projects/573659821443/sites/torniquete-universidad/versions/28ea433c36b64227","status":"FINALIZED","config":{},"labels":{"deployment-tool":"cli-firebase"},"createTime":"2026-06-07T23:40:59.973642Z","createUser":{"email":"perezmezanancy1@gmail.com"},"finalizeTime":"2026-06-07T23:41:01.731015Z","finalizeUser":{"email":"perezmezanancy1@gmail.com"}}
+[debug] [2026-06-07T23:41:01.797Z] [hosting] finalized version for torniquete-universidad:[object Object]
+[info] +  hosting[torniquete-universidad]: version finalized 
+[info] i  hosting[torniquete-universidad]: releasing new version... 
+[debug] [2026-06-07T23:41:01.799Z] Checked if tokens are valid: true, expires at: 1780877861003
+[debug] [2026-06-07T23:41:01.799Z] Checked if tokens are valid: true, expires at: 1780877861003
+[debug] [2026-06-07T23:41:01.799Z] >>> [apiv2][query] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/torniquete-universidad/channels/live/releases versionName=projects%2F573659821443%2Fsites%2Ftorniquete-universidad%2Fversions%2F28ea433c36b64227
+[debug] [2026-06-07T23:41:01.799Z] >>> [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/torniquete-universidad/channels/live/releases {}
+[debug] [2026-06-07T23:41:02.224Z] <<< [apiv2][status] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/torniquete-universidad/channels/live/releases 500
+[debug] [2026-06-07T23:41:02.224Z] <<< [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/torniquete-universidad/channels/live/releases {"error":{"code":500,"message":"Internal error encountered.","status":"INTERNAL"}}
+[error] 
+[error] Error: Request to https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/torniquete-universidad/channels/live/releases?versionName=projects%2F573659821443%2Fsites%2Ftorniquete-universidad%2Fversions%2F28ea433c36b64227 had HTTP Error: 500, Internal error encountered.
+[debug] [2026-06-07T23:41:02.477Z] Error Context: {
+  "body": {
+    "error": {
+      "code": 500,
+      "message": "Internal error encountered.",
+      "status": "INTERNAL"
+    }
+  },
+  "response": {
+    "statusCode": 500
+  }
+}

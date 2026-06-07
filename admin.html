@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Panel Administrativo</title>
+
+<!-- ✅ Firebase -->
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+
+<style>
+body {
+    margin:0;
+    font-family: Arial;
+    background: linear-gradient(135deg,#2c3e50,#d90429);
+}
+
+.header {
+    background:#1d3b73;
+    color:white;
+    padding:15px;
+    text-align:center;
+    font-size:20px;
+    font-weight:bold;
+}
+
+.container {
+    width:90%;
+    margin:auto;
+    margin-top:20px;
+}
+
+.card {
+    background:white;
+    padding:20px;
+    border-radius:15px;
+    margin-bottom:20px;
+}
+
+input {
+    padding:10px;
+    margin:5px;
+    border-radius:8px;
+    border:1px solid #ccc;
+}
+
+/* 🔎 BUSCADOR */
+#buscador {
+    width: 50%;
+    padding:10px;
+    margin-bottom:15px;
+    border-radius:8px;
+    border:1px solid #ccc;
+}
+
+button {
+    padding:10px 15px;
+    border:none;
+    border-radius:8px;
+    cursor:pointer;
+    background:#1d3b73;
+    color:white;
+}
+
+table {
+    width:100%;
+    border-collapse:collapse;
+}
+
+th {
+    background:#1d3b73;
+    color:white;
+    padding:10px;
+}
+
+td {
+    padding:10px;
+    text-align:center;
+    border-bottom:1px solid #ddd;
+}
+</style>
+</head>
+
+<body>
+
+<div class="header">
+Panel Administrativo - Universidad Autónoma del Caribe
+</div>
+
+<div class="container">
+
+<!-- ✅ REGISTRO -->
+<div class="card">
+    <h3>Registrar Usuario</h3>
+
+    <input id="cedula" placeholder="Cédula">
+    <input id="nombre" placeholder="Nombre">
+    <input id="carrera" placeholder="Carrera">
+
+    <button onclick="registrar()">Registrar</button>
+</div>
+
+<!-- ✅ BUSCADOR -->
+<div class="card">
+    <input id="buscador" placeholder="🔎 Buscar estudiante..." onkeyup="filtrar()">
+
+    <table>
+        <thead>
+            <tr>
+                <th>Cédula</th>
+                <th>Nombre</th>
+                <th>Carrera</th>
+                <th>Acción</th>
+            </tr>
+        </thead>
+        <tbody id="tablaUsuarios"></tbody>
+    </table>
+</div>
+
+</div>
+
+<script>
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCK9tiHu5ct3XY_uo5nIOMZCXN6xCmy-H4",
+  authDomain: "torniquete-universidad.firebaseapp.com",
+  databaseURL: "https://torniquete-universidad-default-rtdb.firebaseio.com",
+  projectId: "torniquete-universidad"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+let listaUsuarios = [];
+
+// ✅ REGISTRAR
+function registrar(){
+    const c = cedula.value;
+    const n = nombre.value;
+    const ca = carrera.value;
+
+    if(!c || !n){
+        alert("Completa los datos");
+        return;
+    }
+
+    db.ref("usuarios/" + c).set({
+        nombre: n,
+        carrera: ca
+    });
+}
+
+// ✅ CARGAR USUARIOS
+db.ref("usuarios").on("value", snapshot => {
+
+    listaUsuarios = [];
+
+    snapshot.forEach(child => {
+        listaUsuarios.push({
+            cedula: child.key,
+            nombre: child.val().nombre,
+            carrera: child.val().carrera
+        });
+    });
+
+    mostrar(listaUsuarios);
+});
+
+// ✅ MOSTRAR TABLA
+function mostrar(datos){
+
+    let html = "";
+
+    datos.forEach(u => {
+        html += `
+        <tr>
+            <td>${u.cedula}</td>
+            <td>${u.nombre}</td>
+            <td>${u.carrera}</td>
+            <td>
+                <button onclick="eliminar('${u.cedula}')" style="background:red;">
+                    Eliminar
+                </button>
+            </td>
+        </tr>`;
+    });
+
+    tablaUsuarios.innerHTML = html;
+}
+
+// ✅ FILTRAR EN TIEMPO REAL
+function filtrar(){
+
+    const texto = buscador.value.toLowerCase();
+
+    const filtrados = listaUsuarios.filter(u =>
+        u.cedula.includes(texto) ||
+        u.nombre.toLowerCase().includes(texto) ||
+        u.carrera.toLowerCase().includes(texto)
+    );
+
+    mostrar(filtrados);
+}
+
+// ✅ ELIMINAR
+function eliminar(cedula){
+
+    if(confirm("¿Eliminar usuario?")){
+        db.ref("usuarios/" + cedula).remove();
+    }
+}
+
+</script>
+
+</body>
+</html>

@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Registro</title>
+
+<style>
+
+body{
+  margin:0;
+  font-family: Arial;
+  height:100vh;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+
+  /* 🔥 FONDO */
+  background: linear-gradient(135deg, #0a2a66, #1e90ff);
+}
+
+.card{
+  background:white;
+  padding:40px;
+  border-radius:20px;
+  text-align:center;
+  width:320px;
+  box-shadow:0px 0px 20px rgba(0,0,0,0.3);
+}
+
+.logo{
+  width:90px;
+  margin-bottom:10px;
+}
+
+h3{
+  margin:5px;
+}
+
+input{
+  width:100%;
+  padding:10px;
+  margin:8px 0;
+  border-radius:8px;
+  border:1px solid #ccc;
+}
+
+button{
+  width:100%;
+  padding:10px;
+  background:#0a2a66;
+  color:white;
+  border:none;
+  border-radius:8px;
+  cursor:pointer;
+}
+
+button:hover{
+  background:#1e90ff;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="card">
+
+<img src="img/logo1.png" class="logo">
+
+<h3>Universidad Autónoma del Caribe</h3>
+<h2>Registro</h2>
+
+<input type="text" id="cedula" placeholder="Cédula">
+<input type="text" id="nombre" placeholder="Nombre Completo">
+<input type="text" id="carrera" placeholder="Carrera">
+
+<button onclick="registrar()">Registrar</button>
+
+</div>
+
+<script>
+async function registrar(){
+
+  const cedula = document.getElementById("cedula").value;
+  const nombre = document.getElementById("nombre").value;
+  const carrera = document.getElementById("carrera").value;
+
+  const res = await fetch("http://localhost:3000/registro",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({cedula,nombre,carrera})
+  });
+
+  const data = await res.json();
+
+  if(data.ok){
+    alert("✅ Registrado correctamente");
+  } else{
+    alert("❌ Error");
+  }
+}
+</script>
+
+</body>
+</html>

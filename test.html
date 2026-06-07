@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+/firebasejs/8.10.0/firebase-app.js"></script>
+https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js>
+
+</head>
+
+<body>
+
+<h2>PRUEBA FIREBASE</h2>
+
+<input id="cedula" placeholder="cedula">
+<input id="nombre" placeholder="nombre">
+
+<button onclick="guardar()">Guardar</button>
+
+<script>
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCK9tiHu5ct3XY_uo5nIOMZCXN6xCmy-H4",
+  authDomain: "torniquete-universidad.firebaseapp.com",
+  databaseURL: "https://torniquete-universidad-default-rtdb.firebaseio.com",
+  projectId: "torniquete-universidad"
+};
+
+firebase.initializeApp(firebaseConfig);
+
+const db = firebase.database();
+
+function guardar(){
+
+    const c = document.getElementById("cedula").value;
+    const n = document.getElementById("nombre").value;
+
+    db.ref("usuarios/" + c).set({
+        cedula: c,
+        nombre: n
+    })
+    .then(()=>{
+        alert("✅ Guardado correctamente");
+    })
+    .catch(err=>{
+        alert("❌ Error: " + err);
+    });
+
+}
+
+</script>
+
+</body>
+</html>

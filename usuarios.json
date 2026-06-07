@@ -1,0 +1,10 @@
+[
+  {
+    "cedula": "123456789",
+    "nombre": "Nancy Perez"
+  },
+  {
+    "cedula": "987654321",
+    "nombre": "Admin"
+  }
+]
