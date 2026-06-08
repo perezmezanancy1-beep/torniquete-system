@@ -2,9 +2,8 @@ const express = require("express");
 const admin = require("firebase-admin");
 
 const app = express();
-app.use(express.json());
+app.use(express.json()); // 🔥 MUY IMPORTANTE
 
-// 🔥 CARGA TU JSON DE FIREBASE
 const serviceAccount = require("./firebase-admin.json");
 
 admin.initializeApp({
@@ -14,11 +13,13 @@ admin.initializeApp({
 
 const db = admin.database();
 
-// ✅ RUTA PRINCIPAL (VALIDAR)
+// ✅ RUTA QUE TE FALTA
 app.post("/validar", async (req, res) => {
 
     try {
         const { cedula } = req.body;
+
+        console.log("📡 Recibido:", cedula);
 
         if (!cedula) {
             return res.json({ ok: false });
@@ -33,9 +34,7 @@ app.post("/validar", async (req, res) => {
 
         let user = snap.val();
 
-        // ✅ entrada
         if (!user.estado || user.estado === "fuera") {
-
             await ref.update({ estado: "dentro" });
 
             return res.json({
@@ -44,9 +43,7 @@ app.post("/validar", async (req, res) => {
             });
         }
 
-        // ✅ salida
         if (user.estado === "dentro") {
-
             await ref.update({ estado: "fuera" });
 
             return res.json({
@@ -61,7 +58,7 @@ app.post("/validar", async (req, res) => {
     }
 });
 
-// ✅ SERVIDOR
+// ✅ ARRANQUE
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
