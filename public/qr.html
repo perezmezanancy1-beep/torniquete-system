@@ -3,11 +3,11 @@
 <head>
 <meta charset="UTF-8">
 
-<!-- ✅ FIREBASE -->
+<!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
 
-<!-- ✅ QR -->
+<!-- QR -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
 <style>
@@ -21,7 +21,7 @@ body {
     font-family: Arial;
 }
 
-/* TARJETA */
+
 .card {
     background:white;
     padding:25px;
@@ -30,7 +30,7 @@ body {
     text-align:center;
 }
 
-/* LOGO */
+
 .logo {
     width:70px;
     margin-bottom:10px;
@@ -53,13 +53,13 @@ body {
 
 <div class="card">
 
-<!-- LOGO -->
+
 <img src="img/logo1.png" class="logo">
 
 <h3>Universidad Autónoma del Caribe</h3>
 
 <div id="loginBox">
-    <input id="cedula" placeholder="Cédula"><br><br>
+    <input id="cedulaInput" placeholder="Cédula"><br><br>
     <button onclick="login()">Ingresar</button>
 </div>
 
@@ -89,16 +89,17 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
+let cedula = "";
 let usuario;
 let tiempo = 30;
 let intervalo;
 
-// LOGIN
+// ✅ LOGIN
 function login(){
 
-    const c = document.getElementById("cedula").value;
+    cedula = document.getElementById("cedulaInput").value;
 
-    db.ref("usuarios/" + c).once("value")
+    db.ref("usuarios/" + cedula).once("value")
     .then(snapshot => {
 
         if(snapshot.exists()){
@@ -121,16 +122,13 @@ function login(){
     });
 }
 
-// QR
+// ✅ GENERAR QR (ARREGLADO)
 function generarQR(){
 
     document.getElementById("qr").innerHTML = "";
 
     new QRCode(document.getElementById("qr"), {
-        text: JSON.stringify({
-            cedula: usuario.cedula || "",
-            time: Date.now()
-        }),
+        text: cedula,   // ✅ SOLO LA CÉDULA (CLAVE)
         width:200,
         height:200
     });
@@ -138,7 +136,7 @@ function generarQR(){
     document.getElementById("beep").play();
 }
 
-// TIMER
+// ✅ TIMER
 function iniciarTimer(){
 
     tiempo = 30;
