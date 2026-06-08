@@ -5,10 +5,10 @@ const path = require("path");
 const app = express();
 app.use(express.json());
 
-// ✅ SERVIR ARCHIVOS WEB
+// ✅ SERVIR TODAS LAS PÁGINAS WEB
 app.use(express.static("public"));
 
-// ✅ FIREBASE DESDE ENV
+// ✅ FIREBASE (DESDE RENDER ENV)
 const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
 
 admin.initializeApp({
@@ -22,57 +22,59 @@ console.log("✅ Firebase conectado");
 
 // ✅ API VALIDAR (RASPBERRY)
 app.post("/validar", async (req, res) => {
+  try {
 
-    try {
-        const { cedula } = req.body;
+    const { cedula } = req.body;
 
-        if (!cedula) {
-            return res.json({ ok: false });
-        }
-
-        const ref = db.ref("usuarios/" + cedula);
-        const snap = await ref.once("value");
-
-        if (!snap.exists()) {
-            return res.json({ ok: false });
-        }
-
-        let user = snap.val();
-
-        if (!user.estado || user.estado === "fuera") {
-
-            await ref.update({ estado: "dentro" });
-
-            return res.json({
-                ok: true,
-                tipo: "entrada"
-            });
-        }
-
-        if (user.estado === "dentro") {
-
-            await ref.update({ estado: "fuera" });
-
-            return res.json({
-                ok: true,
-                tipo: "salida"
-            });
-        }
-
-    } catch (error) {
-        console.log(error);
-        res.json({ ok: false });
+    if (!cedula) {
+      return res.json({ ok: false });
     }
+
+    const ref = db.ref("usuarios/" + cedula);
+    const snap = await ref.once("value");
+
+    if (!snap.exists()) {
+      return res.json({ ok: false });
+    }
+
+    let user = snap.val();
+
+    // ✅ ENTRADA
+    if (!user.estado || user.estado === "fuera") {
+
+      await ref.update({ estado: "dentro" });
+
+      return res.json({
+        ok: true,
+        tipo: "entrada"
+      });
+    }
+
+    // ✅ SALIDA
+    if (user.estado === "dentro") {
+
+      await ref.update({ estado: "fuera" });
+
+      return res.json({
+        ok: true,
+        tipo: "salida"
+      });
+    }
+
+  } catch (error) {
+    console.log("❌ Error:", error);
+    res.json({ ok: false });
+  }
 });
 
-// ✅ PÁGINA PRINCIPAL
+// ✅ RUTA PRINCIPAL
 app.get("/", (req, res) => {
-    res.send("✅ Sistema Torniquete Activo");
+  res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-// ✅ SERVIDOR
+// ✅ SERVER
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-    console.log("🚀 Servidor corriendo en puerto", PORT);
+  console.log("🚀 Servidor web activo en puerto", PORT);
 });
