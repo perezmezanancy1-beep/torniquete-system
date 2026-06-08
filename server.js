@@ -1,10 +1,14 @@
 const express = require("express");
 const admin = require("firebase-admin");
+const path = require("path");
 
 const app = express();
-app.use(express.json()); // 🔥 IMPORTANTE
+app.use(express.json());
 
-// ✅ CONFIGURACIÓN FIREBASE DESDE RENDER (ENV)
+// ✅ SERVIR ARCHIVOS WEB
+app.use(express.static("public"));
+
+// ✅ FIREBASE DESDE ENV
 const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
 
 admin.initializeApp({
@@ -16,42 +20,28 @@ const db = admin.database();
 
 console.log("✅ Firebase conectado");
 
-// ✅ RUTA PRINCIPAL (VALIDACIÓN DE ACCESO)
+// ✅ API VALIDAR (RASPBERRY)
 app.post("/validar", async (req, res) => {
 
     try {
         const { cedula } = req.body;
 
-        console.log("📡 Petición recibida:", cedula);
-
         if (!cedula) {
-            return res.json({ ok: false, msg: "Sin cédula" });
+            return res.json({ ok: false });
         }
 
-        // ✅ BUSCAR USUARIO
         const ref = db.ref("usuarios/" + cedula);
         const snap = await ref.once("value");
 
         if (!snap.exists()) {
-            console.log("❌ Usuario no existe:", cedula);
             return res.json({ ok: false });
         }
 
         let user = snap.val();
 
-        console.log("👤 Usuario:", user.nombre);
-
-        // ✅ LÓGICA AUTOMÁTICA
-
-        // 🔓 ENTRADA
         if (!user.estado || user.estado === "fuera") {
 
-            await ref.update({
-                estado: "dentro",
-                ultima_entrada: Date.now()
-            });
-
-            console.log("✅ ENTRADA:", cedula);
+            await ref.update({ estado: "dentro" });
 
             return res.json({
                 ok: true,
@@ -59,15 +49,9 @@ app.post("/validar", async (req, res) => {
             });
         }
 
-        // 🚪 SALIDA
         if (user.estado === "dentro") {
 
-            await ref.update({
-                estado: "fuera",
-                ultima_salida: Date.now()
-            });
-
-            console.log("🚪 SALIDA:", cedula);
+            await ref.update({ estado: "fuera" });
 
             return res.json({
                 ok: true,
@@ -76,18 +60,17 @@ app.post("/validar", async (req, res) => {
         }
 
     } catch (error) {
-        console.error("❌ ERROR:", error);
+        console.log(error);
         res.json({ ok: false });
     }
-
 });
 
-// ✅ RUTA DE PRUEBA (MUY IMPORTANTE)
+// ✅ PÁGINA PRINCIPAL
 app.get("/", (req, res) => {
-    res.send("✅ Servidor torniquete activo");
+    res.send("✅ Sistema Torniquete Activo");
 });
 
-// ✅ PUERTO
+// ✅ SERVIDOR
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
