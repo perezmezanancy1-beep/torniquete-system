@@ -3,60 +3,36 @@
 <head>
 <meta charset="UTF-8">
 
-<!-- ✅ Firebase -->
+
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
 
-<!-- ✅ QR -->
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
 <style>
 body{
-    margin:0;
-    display:flex;
-    justify-content:center;
-    align-items:center;
-    height:100vh;
-    background: linear-gradient(135deg,#2c3e50,#d90429);
-    font-family: Arial;
+display:flex;
+justify-content:center;
+align-items:center;
+height:100vh;
+background:linear-gradient(#2c3e50,#d90429);
+font-family:Arial;
 }
+
 
 .card{
-    background:white;
-    padding:25px;
-    border-radius:20px;
-    width:320px;
-    text-align:center;
+background:white;
+padding:20px;
+border-radius:15px;
+text-align:center;
 }
 
-/* ✅ LOGO */
+
 .logo{
-    width:80px;
-    margin-bottom:10px;
+width:70px;
 }
-
-#qr{
-    display:flex;
-    justify-content:center;
-    margin-top:10px;
-}
-
-#estado{
-    font-weight:bold;
-    margin:10px;
-}
-
-#timer{
-    color:red;
-
-
-    font-weight:bold;
-}
-
-#hora{
-    font-size:13px;
-    color:#555;
-}
+#timer{color:red;font-weight:bold;}
 </style>
 
 </head>
@@ -65,24 +41,29 @@ body{
 
 <div class="card">
 
-<!-- ✅ LOGO -->
+
 img/logo1.png
 
-<h3>Universidad Autónoma del Caribe</h3>
 
-<!-- LOGIN -->
+
+
+
+
+
+
+
 <div id="loginBox">
-    <input id="cedulaInput" placeholder="Cédula"><br><br>
-    <button onclick="login()">Ingresar</button>
+<input id="cedulaInput" placeholder="Cédula"><br><br>
+<button onclick="login()">Ingresar</button>
 </div>
 
-<!-- QR -->
+
 <div id="qrView" style="display:none">
 
-<h3 id="nombre"></h3>
+    <h3 id="nombre"></h3>
 <p id="carrera"></p>
-
-<p id="tipoUsuario"></p>
+<p id="tipo"></p>
+<p id="detalle"></p>
 
 <div id="estado"></div>
 
@@ -98,153 +79,87 @@ img/logo1.png
 
 
 
+
 <script>
 
-const firebaseConfig = {
-  apiKey: "AIzaSy...",
-  authDomain: "torniquete-universidad.firebaseapp.com",
-  databaseURL: "https://torniquete-universidad-default-rtdb.firebaseio.com",
-  projectId: "torniquete-universidad"
-};
+firebase.initializeApp({
+databaseURL:"https://torniquete-universidad-default-rtdb.firebaseio.com"
+});
 
-firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
+const db=firebase.database();
 
+let user,cedula,intQR,intTime;
 
-
-let usuario;
-let cedula;
-let intervalo;
-let intervaloQR;
-
-// ✅ LOGIN
 function login(){
 
-    cedula = document.getElementById("cedulaInput").value;
+cedula=cedulaInput.value;
 
-    if(!cedula){
-        alert("Ingrese cédula");
-        return;
-    }
+db.ref("usuarios/"+cedula).once("value").then(s=>{
 
-    db.ref("usuarios/" + cedula).once("value")
-    .then(snapshot => {
+if(!s.exists()){alert("No existe");return;}
 
-        if(!snapshot.exists()){
-            alert("❌ Usuario no registrado");
-            return;
-        }
+user=s.val();
 
-        usuario = snapshot.val();
-
-        // ✅ VALIDAR VISITANTE
-        if(usuario.tipo === "VISITANTE"){
-
-            if(!usuario.expiracion || Date.now() > usuario.expiracion){
-                bloquear("QR expirado (8 horas)");
-                return;
-            }
-        }
-
-        mostrar();
-
-    });
+if(user.tipo==="VISITANTE" && Date.now()>user.expiracion){
+loginBox.innerHTML="<h2 style='color:red'>⛔ CADUCADO</h2>";return;
 }
 
-// ✅ MOSTRAR
+mostrar();
+
+});
+
+}
+
+
 function mostrar(){
 
-    loginBox.style.display="none";
-    qrView.style.display="block";
+loginBox.style.display="none";
+qrView.style.display="block";
 
-    nombre.innerText = usuario.nombre || "";
-    carrera.innerText = usuario.carrera || "";
+nombre.innerText=user.nombre;
+carrera.innerText=user.carrera || "";
+tipo.innerText="👤 "+user.tipo;
 
-    tipoUsuario.innerHTML = "👤 " + (usuario.tipo || "");
+if(user.tipo==="TRABAJADOR"){
+detalle.innerText="🏷 "+(user.tipoTrabajador||"");
+}
 
-    estado.innerHTML = "<span style='color:green;'>✅ ACCESO PERMITIDO</span>";
+estado.innerHTML="<span style='color:green'>✅ ACCESO PERMITIDO</span>";
 
-    generarQR();
-    iniciarTimer();
-    iniciarQRDinamico();
+generarQR();
+intQR=setInterval(generarQR,30000);
+intTime=setInterval(timer,1000);
+
 }
 
 
-
-// ✅ BLOQUEAR
-function bloquear(msg){
-
-    loginBox.innerHTML = `
-    <h2 style="color:red;">⛔ ACCESO DENEGADO</h2>
-    <p>${msg}</p>
-    `;
-}
-
-// ✅ QR DINÁMICO (CADA 30s)
-function iniciarQRDinamico(){
-
-    clearInterval(intervaloQR);
-
-    intervaloQR = setInterval(()=>{
-        generarQR();
-    },30000);
-}
-
-// ✅ GENERAR QR
 function generarQR(){
 
-    document.getElementById("qr").innerHTML = "";
+qr.innerHTML="";
 
-    // ✅ CAMBIO DINÁMICO (timestamp)
-    const contenido = cedula + "-" + Date.now();
-
-    new QRCode(document.getElementById("qr"), {
-        text: contenido,
-        width:200,
-        height:200
-    });
-
+new QRCode(qr,{
+text:ceDULA = cedula+"-"+Date.now(),
+width:200,
+height:200
+});
 
 }
 
-// ✅ TIMER + HORA REAL
-function iniciarTimer(){
+function timer(){
 
-clearInterval(intervalo);
+let now=new Date();
 
-intervalo = setInterval(()=>{
+hora.innerText="🕒 "+now.toLocaleTimeString();
 
-    const ahora = new Date();
+if(user.tipo==="VISITANTE"){
 
-    // ✅ HORA ACTUAL
-    let h = ahora.getHours().toString().padStart(2,"0");
-    let m = ahora.getMinutes().toString().padStart(2,"0");
-    let s = ahora.getSeconds().toString().padStart(2,"0");
+let r=user.expiracion-Date.now();
+let m=Math.floor(r/60000);
+let s=Math.floor((r%60000)/1000);
 
-    document.getElementById("hora").innerText =
-        `🕒 ${h}:${m}:${s}`;
+timer.innerText=`⏳ ${m}m ${s}s`;
 
-    // ✅ VISITANTE
-    if(usuario.tipo === "VISITANTE"){
-
-        let restante = usuario.expiracion - Date.now();
-
-        if(restante <= 0){
-            clearInterval(intervalo);
-            bloquear("QR expirado");
-            return;
-        }
-
-        let minutos = Math.floor(restante / 60000);
-        let segundos = Math.floor((restante % 60000)/1000);
-
-        timer.innerHTML = `⏳ Expira en ${minutos}m ${segundos}s`;
-
-    } else {
-        timer.innerHTML = "<span style='color:green;'>✅ Acceso permanente</span>";
-    }
-
-},1000);
+}
 
 }
 
