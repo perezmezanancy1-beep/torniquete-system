@@ -3,21 +3,21 @@
 <head>
 <meta charset="UTF-8">
 
-<!-- ✅ Firebase -->
-https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js</script>
+<!-- ✅ Firebase (BIEN ESCRITO) -->
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebasept>
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
 
-<!-- ✅ QR LIBRERIA (CORREGIDO) -->
-.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<!-- ✅ QR LIBRERIA (BIEN ESCRITO) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
 <style>
 body{
+    margin:0;
+    height:100vh;
     display:flex;
     justify-content:center;
     align-items:center;
-    height:100vh;
-    margin:0;
-    background:linear-gradient(#2c3e50,#d90429);
+    background:linear-gradient(135deg,#2c3e50,#d90429);
     font-family:Arial;
 }
 
@@ -26,8 +26,9 @@ body{
     background:white;
     padding:25px;
     border-radius:20px;
-    width:320px;
+
     text-align:center;
+    width:320px;
 }
 
 /* ✅ LOGO */
@@ -45,9 +46,14 @@ body{
     margin:15px 0;
 }
 
+#estado{
+    font-weight:bold;
+    margin-top:10px;
+}
+
 #timer{
     color:red;
-    font-weight:bold;
+    margin-top:10px;
 }
 </style>
 
@@ -57,18 +63,18 @@ body{
 
 <div class="card">
 
-<!-- ✅ LOGO REAL -->
-img/logo1.png
+<!-- ✅ LOGO CORRECTO -->
+<img src="img/logo1.png" class="logo">
 
 <h3>Universidad Autónoma del Caribe</h3>
 
-
+<!-- LOGIN -->
 <div id="loginBox">
 <input id="cedulaInput" placeholder="Cédula"><br><br>
 <button onclick="login()">Ingresar</button>
 </div>
 
-
+<!-- QR -->
 <div id="qrView" style="display:none">
 
 <h3 id="nombre"></h3>
@@ -93,8 +99,10 @@ img/logo1.png
 
 
 
+
 <script>
 
+// ✅ Firebase config
 firebase.initializeApp({
 databaseURL:"https://torniquete-universidad-default-rtdb.firebaseio.com"
 });
@@ -106,83 +114,96 @@ let user, cedula, intervaloQR;
 // ✅ LOGIN
 function login(){
 
-    cedula = cedulaInput.value;
+cedula = document.getElementById("cedulaInput").value;
 
-    db.ref("usuarios/" + cedula).once("value").then(s=>{
+if(!cedula){
+alert("Ingrese cédula");
+return;
+}
 
-        if(!s.exists()){
-            alert("No existe");
-            return;
-        }
+db.ref("usuarios/" + cedula).once("value").then(s=>{
 
-        user = s.val();
+if(!s.exists()){
+alert("❌ Usuario no existe");
+return;
+}
 
-        if(user.tipo==="VISITANTE" && Date.now()>user.expiracion){
-            loginBox.innerHTML="<h2 style='color:red'>⛔ CADUCADO</h2>";
-            return;
-        }
+user = s.val();
 
-        mostrar();
-    });
+// ✅ VALIDAR VISITANTE
+if(user.tipo==="VISITANTE" && Date.now()>user.expiracion){
+loginBox.innerHTML="<h2 style='color:red'>⛔ QR EXPIRADO</h2>";
+return;
+}
+
+mostrar();
+
+});
 
 
 }
 
-
-// ✅ MOSTRAR
+// ✅ MOSTRAR DATOS
 function mostrar(){
 
-    loginBox.style.display="none";
-    qrView.style.display="block";
+document.getElementById("loginBox").style.display="none";
+document.getElementById("qrView").style.display="block";
 
-    nombre.innerText = user.nombre;
-    carrera.innerText = user.carrera || "";
-    tipo.innerText = "👤 " + user.tipo;
+document.getElementById("nombre").innerText = user.nombre;
+document.getElementById("carrera").innerText = user.carrera || "";
+document.getElementById("tipo").innerText = "👤 " + user.tipo;
 
-    if(user.tipo==="TRABAJADOR"){
-        detalle.innerText="🏷 " + (user.tipoTrabajador || "");
-    }
+if(user.tipo==="TRABAJADOR"){
+document.getElementById("detalle").innerText = "🏷 " + (user.tipoTrabajador||"");
+}
 
-    estado.innerHTML="<span style='color:green'>✅ ACCESO PERMITIDO</span>";
+document.getElementById("estado").innerHTML =
+"<span style='color:green'>✅ ACCESO PERMITIDO</span>";
 
-    generarQR();
-    intervaloQR = setInterval(generarQR, 30000);
+generarQR();
+intervaloQR = setInterval(generarQR,30000);
 
 }
 
-// ✅ QR DINÁMICO
+// ✅ GENERAR QR DINÁMICO
 function generarQR(){
 
-    qr.innerHTML="";
+document.getElementById("qr").innerHTML="";
 
-    new QRCode(qr,{
-        text: cedula + "-" + Date.now(),
-        width:200,
-        height:200
-    });
+new QRCode(document.getElementById("qr"),{
+text: cedula + "-" + Date.now(),
+width:200,
+height:200
+});
 
 }
 
-// ✅ TIMER
+// ✅ CONTADOR
 setInterval(()=>{
 
-    if(user && user.tipo==="VISITANTE"){
+if(!user) return;
 
-        let r = user.expiracion - Date.now();
+if(user.tipo==="VISITANTE"){
 
-        if(r<=0){
-            timer.innerText="⛔ Expirado";
-            return;
-        }
+let restante = user.expiracion - Date.now();
 
-        let m = Math.floor(r/60000);
-        let s = Math.floor((r%60000)/1000);
+if(restante <= 0){
+document.getElementById("timer").innerText = "⛔ Expirado";
+return;
+}
 
-        timer.innerText=`⏳ ${m}m ${s}s`;
+let m = Math.floor(restante / 60000);
+let s = Math.floor((restante % 60000)/1000);
 
-    }else if(user){
-        timer.innerText="✅ Acceso permanente";
-    }
+document.getElementById("timer").innerText =
+`⏳ ${m}m ${s}s`;
+
+}else{
+
+document.getElementById("timer").innerText =
+"✅ Acceso permanente";
+
+}
 
 },1000);
 
