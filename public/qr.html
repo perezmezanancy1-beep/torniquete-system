@@ -17,8 +17,8 @@ body{
     justify-content:center;
     align-items:center;
     height:100vh;
-    background:linear-gradient(135deg,#2c3e50,#d90429);
-    font-family:Arial;
+    background: linear-gradient(135deg,#2c3e50,#d90429);
+    font-family: Arial;
 }
 
 .card{
@@ -29,21 +29,33 @@ body{
     text-align:center;
 }
 
+/* ✅ LOGO */
+.logo{
+    width:80px;
+    margin-bottom:10px;
+}
+
 #qr{
     display:flex;
     justify-content:center;
     margin-top:10px;
 }
 
-#timer{
-    margin-top:10px;
-    font-weight:bold;
-    color:red;
-}
-
 #estado{
     font-weight:bold;
-    margin-top:10px;
+    margin:10px;
+}
+
+#timer{
+    color:red;
+
+
+    font-weight:bold;
+}
+
+#hora{
+    font-size:13px;
+    color:#555;
 }
 </style>
 
@@ -53,10 +65,15 @@ body{
 
 <div class="card">
 
+<!-- ✅ LOGO -->
+img/logo1.png
+
+<h3>Universidad Autónoma del Caribe</h3>
+
 <!-- LOGIN -->
 <div id="loginBox">
-<input id="cedulaInput" placeholder="Cédula"><br><br>
-<button onclick="login()">Ingresar</button>
+    <input id="cedulaInput" placeholder="Cédula"><br><br>
+    <button onclick="login()">Ingresar</button>
 </div>
 
 <!-- QR -->
@@ -65,10 +82,13 @@ body{
 <h3 id="nombre"></h3>
 <p id="carrera"></p>
 
+<p id="tipoUsuario"></p>
+
 <div id="estado"></div>
 
 <div id="qr"></div>
 
+<p id="hora"></p>
 <p id="timer"></p>
 
 </div>
@@ -95,6 +115,7 @@ const db = firebase.database();
 let usuario;
 let cedula;
 let intervalo;
+let intervaloQR;
 
 // ✅ LOGIN
 function login(){
@@ -116,60 +137,69 @@ function login(){
 
         usuario = snapshot.val();
 
-        // ✅ VALIDAR EXPIRACIÓN PARA VISITANTES
+        // ✅ VALIDAR VISITANTE
         if(usuario.tipo === "VISITANTE"){
 
-            if(!usuario.expiracion){
-                bloquear("QR no válido");
-                return;
-            }
-
-            if(Date.now() > usuario.expiracion){
+            if(!usuario.expiracion || Date.now() > usuario.expiracion){
                 bloquear("QR expirado (8 horas)");
                 return;
             }
         }
 
-        mostrarQR();
+        mostrar();
 
     });
 }
 
+// ✅ MOSTRAR
+function mostrar(){
 
-// ✅ MOSTRAR QR
-function mostrarQR(){
+    loginBox.style.display="none";
+    qrView.style.display="block";
 
-    document.getElementById("loginBox").style.display = "none";
-    document.getElementById("qrView").style.display = "block";
+    nombre.innerText = usuario.nombre || "";
+    carrera.innerText = usuario.carrera || "";
 
-    document.getElementById("nombre").innerText = usuario.nombre || "";
-    document.getElementById("carrera").innerText = usuario.carrera || "";
+    tipoUsuario.innerHTML = "👤 " + (usuario.tipo || "");
 
-    document.getElementById("estado").innerHTML =
-        "<span style='color:green;'>✅ ACCESO PERMITIDO</span>";
+    estado.innerHTML = "<span style='color:green;'>✅ ACCESO PERMITIDO</span>";
 
     generarQR();
     iniciarTimer();
+    iniciarQRDinamico();
 }
+
 
 
 // ✅ BLOQUEAR
-function bloquear(mensaje){
+function bloquear(msg){
 
-    document.getElementById("loginBox").innerHTML = `
-        <h2 style="color:red;">⛔ ACCESO DENEGADO</h2>
-        <p>${mensaje}</p>
+    loginBox.innerHTML = `
+    <h2 style="color:red;">⛔ ACCESO DENEGADO</h2>
+    <p>${msg}</p>
     `;
 }
 
+// ✅ QR DINÁMICO (CADA 30s)
+function iniciarQRDinamico(){
+
+    clearInterval(intervaloQR);
+
+    intervaloQR = setInterval(()=>{
+        generarQR();
+    },30000);
+}
 
 // ✅ GENERAR QR
 function generarQR(){
 
     document.getElementById("qr").innerHTML = "";
 
+    // ✅ CAMBIO DINÁMICO (timestamp)
+    const contenido = cedula + "-" + Date.now();
+
     new QRCode(document.getElementById("qr"), {
-        text: cedula,
+        text: contenido,
         width:200,
         height:200
     });
@@ -177,15 +207,24 @@ function generarQR(){
 
 }
 
-
-
-// ✅ TIMER REAL
+// ✅ TIMER + HORA REAL
 function iniciarTimer(){
 
 clearInterval(intervalo);
 
 intervalo = setInterval(()=>{
 
+    const ahora = new Date();
+
+    // ✅ HORA ACTUAL
+    let h = ahora.getHours().toString().padStart(2,"0");
+    let m = ahora.getMinutes().toString().padStart(2,"0");
+    let s = ahora.getSeconds().toString().padStart(2,"0");
+
+    document.getElementById("hora").innerText =
+        `🕒 ${h}:${m}:${s}`;
+
+    // ✅ VISITANTE
     if(usuario.tipo === "VISITANTE"){
 
         let restante = usuario.expiracion - Date.now();
@@ -199,13 +238,10 @@ intervalo = setInterval(()=>{
         let minutos = Math.floor(restante / 60000);
         let segundos = Math.floor((restante % 60000)/1000);
 
-        document.getElementById("timer").innerText =
-            `⏳ Expira en ${minutos}m ${segundos}s`;
+        timer.innerHTML = `⏳ Expira en ${minutos}m ${segundos}s`;
 
     } else {
-
-        document.getElementById("timer").innerText =
-            "✅ Acceso permanente";
+        timer.innerHTML = "<span style='color:green;'>✅ Acceso permanente</span>";
     }
 
 },1000);
