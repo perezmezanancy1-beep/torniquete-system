@@ -8,22 +8,65 @@
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
 
-<!-- ✅ jQuery + Select2 -->
+<!-- ✅ jQuery -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+<!-- ✅ Select2 -->
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet"/>
-<script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
+
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 
 <style>
-body {font-family:Arial;margin:0;background:linear-gradient(135deg,#2c3e50,#d90429);}
-.header {background:#1d3b73;color:white;padding:15px;text-align:center;}
-.container {width:90%;margin:auto;}
-.card {background:white;padding:20px;margin:20px;border-radius:15px;}
-input,select,button {padding:10px;margin:5px;border-radius:8px;}
-button {background:#1d3b73;color:white;border:none;}
-table {width:100%;border-collapse:collapse;}
-th {background:#1d3b73;color:white;padding:10px;}
-td {padding:10px;text-align:center;}
+body{
+    font-family:Arial;
+    margin:0;
+    background:linear-gradient(135deg,#2c3e50,#d90429);
+}
+.header{
+    background:#1d3b73;
+    color:white;
+    padding:15px;
+    text-align:center;
+}
+.container{
+    width:90%;
+    margin:auto;
+}
+.card{
+    background:white;
+    padding:20px;
+    margin:20px;
+    border-radius:15px;
+}
+input,select{
+    padding:10px;
+    margin:5px;
+    border-radius:8px;
+    border:1px solid #ccc;
+}
+button{
+    padding:10px;
+    background:#1d3b73;
+    color:white;
+    border:none;
+    border-radius:8px;
+    cursor:pointer;
+}
+table{
+    width:100%;
+    border-collapse:collapse;
+}
+th{
+    background:#1d3b73;
+    color:white;
+    padding:10px;
+}
+td{
+    padding:10px;
+    text-align:center;
+}
 </style>
+
 </head>
 
 <body>
@@ -32,7 +75,7 @@ td {padding:10px;text-align:center;}
 
 <div class="container">
 
-<!-- REGISTRO -->
+
 <div class="card">
 
 
@@ -63,13 +106,16 @@ td {padding:10px;text-align:center;}
 
 </div>
 
-<!-- TABLA -->
+
 <div class="card">
-<input id="buscador" placeholder="Buscar..." onkeyup="filtrar()">
+<input id="buscador" placeholder="🔎 Buscar..." onkeyup="filtrar()">
 <table>
 <thead>
 <tr>
-<th>Cédula</th><th>Nombre</th><th>Carrera</th><th>Acción</th>
+<th>Cédula</th>
+<th>Nombre</th>
+<th>Carrera</th>
+<th>Acción</th>
 </tr>
 </thead>
 <tbody id="tablaUsuarios"></tbody>
@@ -93,10 +139,12 @@ const db = firebase.database();
 let listaUsuarios=[];
 
 // ✅ VALIDACIONES
-function soloNumeros(i){i.value=i.value.replace(/[^0-9]/g,'');}
+function soloNumeros(i){
+i.value = i.value.replace(/[^0-9]/g,'');
+}
 
 function formatoNombre(i){
-i.value=i.value.toUpperCase()
+i.value = i.value.toUpperCase()
 .normalize("NFD").replace(/[\u0300-\u036f]/g,"")
 .replace(/[^A-Z\s]/g,'');
 }
@@ -104,95 +152,88 @@ i.value=i.value.toUpperCase()
 // ✅ SELECT MODERNO
 function cargarCarreras(){
 
-const nivel=document.getElementById("nivel").value;
+const nivel = document.getElementById("nivel").value;
 
-let data=[];
+let lista = [];
 
 if(nivel==="PREGRADO"){
-data=[
-{ text:"ADMINISTRACION DE EMPRESAS"},
-{ text:"CONTADURIA PUBLICA"},
-{ text:"COMUNICACION SOCIAL PERIODISMO"},
-{ text:"ADMINISTRACION DE EMPRESAS TURISTICAS Y HOTELERAS"},
-{ text:"INGENIERIA INDUSTRIAL"},
-{ text:"INGENIERIA MECANICA"},
-{ text:"DERECHO"},
-{ text:"NEGOCIOS Y FINANZAS INTERNACIONALES"},
-{ text:"PSICOLOGIA"},
-{ text:"INGENIERIA MECATRONICA"},
-{ text:"ADMINISTRACION MARITIMA Y FLUVIAL"},
-{ text:"DISEÑO GRAFICO"},
-{ text:"DISEÑO DE ESPACIOS"},
-{ text:"DISEÑO DE MODAS"},
-{ text:"DEPORTE Y CULTURA FISICA"},
-{ text:"CIENCIAS POLITICAS"},
-{ text:"COMUNICACION AUDIOVISUAL"},
-{ text:"TECNICA PROFESIONAL EN OPERACIONES LOGISTICAS"},
-{ text:"INGENIERIA ELECTRONICA"},
-{ text:"INGENIERIA EN ANALITICA DE DATOS"},
-{ text:"NEGOCIOS DIGITALES"},
-{ text:"ARQUITECTURA"},
-{ text:"INGENIERIA DE SISTEMAS"}
+lista=[
+"ADMINISTRACION DE EMPRESAS",
+"CONTADURIA PUBLICA",
+"COMUNICACION SOCIAL PERIODISMO",
+"ADMINISTRACION DE EMPRESAS TURISTICAS Y HOTELERAS",
+"INGENIERIA INDUSTRIAL",
+"INGENIERIA MECANICA",
+"DERECHO",
+"NEGOCIOS Y FINANZAS INTERNACIONALES",
+"PSICOLOGIA",
+"INGENIERIA MECATRONICA",
+"ADMINISTRACION MARITIMA Y FLUVIAL",
+"DISEÑO GRAFICO",
+"DISEÑO DE ESPACIOS",
+"DISEÑO DE MODAS",
+"DEPORTE Y CULTURA FISICA",
+"CIENCIAS POLITICAS",
+"COMUNICACION AUDIOVISUAL",
+"TECNICA PROFESIONAL EN OPERACIONES LOGISTICAS",
+"INGENIERIA ELECTRONICA",
+"INGENIERIA EN ANALITICA DE DATOS",
+"NEGOCIOS DIGITALES",
+"ARQUITECTURA",
+"INGENIERIA DE SISTEMAS"
 ];
 }
 
-// ✅ POSGRADO ANIDADO
+
 else if(nivel==="POSGRADO"){
-data=[
-{
-text:"ESPECIALIZACIONES",
-children:[
-{ text:"ESPECIALIZACION EN TRIBUTACION"},
-{ text:"ESPECIALIZACION EN ALTA GERENCIA"},
-{ text:"ESPECIALIZACION EN GERENCIA DEL TALENTO HUMANO"},
-{ text:"ESPECIALIZACION EN GERENCIA DE PRODUCCION Y OPERACIONES LOGISTICAS"},
-{ text:"ESPECIALIZACION EN FINANZAS"},
-{ text:"ESPECIALIZACION EN GERENCIA DE MERCADEO"},
-{ text:"ESPECIALIZACION EN SEGURIDAD Y SALUD EN EL TRABAJO"},
-{ text:"ESPECIALIZACION EN GERENCIA DE LA COMUNICACION"},
-{ text:"ESPECIALIZACION EN GERENCIA DE PROYECTOS"},
-{ text:"ESPECIALIZACION EN INTELIGENCIA ARTIFICIAL"}
-]
-},
-{
-text:"MAESTRIAS",
-children:[
-{ text:"MAESTRIA EN INGENIERIA MECANICA"},
-{ text:"MAESTRIA EN MERCADEO"},
-{ text:"MAESTRIA EN SISTEMAS DE GESTION"},
-{ text:"MAESTRIA EN LOGISTICA INTEGRAL"},
-{ text:"MAESTRIA EN EDUCACION"},
-{ text:"MAESTRIA EN FINANZAS"},
-{ text:"MAESTRIA EN ADMINISTRACION MBA"},
-{ text:"MAESTRIA EN GERENCIA TRIBUTARIA"}
-]
-}
+lista=[
+"ESPECIALIZACION EN TRIBUTACION",
+"ESPECIALIZACION EN ALTA GERENCIA",
+"ESPECIALIZACION EN GERENCIA DEL TALENTO HUMANO",
+"ESPECIALIZACION EN GERENCIA DE PRODUCCION Y OPERACIONES LOGISTICAS",
+"ESPECIALIZACION EN FINANZAS",
+"ESPECIALIZACION EN GERENCIA DE MERCADEO",
+"ESPECIALIZACION EN SEGURIDAD Y SALUD EN EL TRABAJO",
+"ESPECIALIZACION EN GERENCIA DE PROYECTOS",
+"ESPECIALIZACION EN INTELIGENCIA ARTIFICIAL",
+"MAESTRIA EN INGENIERIA MECANICA",
+"MAESTRIA EN MERCADEO",
+"MAESTRIA EN SISTEMAS DE GESTION",
+"MAESTRIA EN LOGISTICA INTEGRAL",
+"MAESTRIA EN EDUCACION",
+"MAESTRIA EN FINANZAS",
+"MAESTRIA EN ADMINISTRACION MBA",
+"MAESTRIA EN GERENCIA TRIBUTARIA"
 ];
 }
 
 else if(nivel==="DIPLOMADO"){
-data=[{ text:"DIPLOMADO EN CONTRATACION ESTATAL"}];
+lista=["DIPLOMADO EN CONTRATACION ESTATAL"];
 }
 
 else if(nivel==="TECNICO"){
-data=[
-{ text:"TECNICO LABORAL EN AUXILIAR ADMINISTRATIVO"},
-{ text:"TECNICO LABORAL EN AUXILIAR CONTABLE Y FINANCIERO"},
-{ text:"TECNICO LABORAL EN PRODUCCION GRAFICA"},
-{ text:"TECNICO LABORAL EN ENERGIA SOLAR"}
+lista=[
+"TECNICO LABORAL EN AUXILIAR ADMINISTRATIVO",
+"TECNICO LABORAL EN AUXILIAR CONTABLE Y FINANCIERO",
+"TECNICO LABORAL EN PRODUCCION GRAFICA",
+"TECNICO LABORAL EN ENERGIA SOLAR"
 ];
 }
 
+// ✅ PASAR A SELECT2
+let data = lista.map(x => ({id:x,text:x}));
+
 $("#carrera").empty().select2({
 data:data,
-placeholder:"Seleccione programa",
-width:"300px"
+placeholder:"Buscar programa...",
+allowClear:true
 });
+
 }
 
-// ✅ INIT SELECT2
+// ✅ INICIAR SELECT
 $(document).ready(function(){
-$("#carrera").select2({
+$('#carrera').select2({
 placeholder:"Seleccione programa"
 });
 });
@@ -207,7 +248,7 @@ function registrar(){
 let exp=null;
 
 if(tipo.value==="VISITANTE"){
-exp=Date.now()+(8*60*60*1000);
+exp=Date.now()+ (8*60*60*1000);
 }
 
 const data={
@@ -218,10 +259,12 @@ nivel:nivel.value,
 carrera:$("#carrera").val(),
 celular:celular.value,
 correo:correo.value,
-expiracion:exp,
+expiracion:exp
 };
 
-if(!data.cedula||!data.nombre){alert("Faltan datos");return;}
+if(!data.cedula||!data.nombre){
+alert("Faltan datos");return;
+}
 
 db.ref("usuarios/"+data.cedula).set(data);
 
@@ -229,40 +272,50 @@ alert("✅ Registrado");
 
 limpiar();
 
+// ✅ QR VISITANTE
 if(data.tipo==="VISITANTE"){
-const msg="Acceso QR: https://torniquete-system.onrender.com/qr.html";
 
-if(data.celular)
-window.open(`https://wa.me/57${data.celular}?text=${encodeURIComponent(msg)}`);
+const mensaje="Acceso QR: https://torniquete-system.onrender.com/qr.html";
 
-if(data.correo)
-window.open(`mailto:${data.correo}?body=${msg}`);
+if(data.celular){
+window.open(`https://wa.me/57${data.celular}?text=${encodeURIComponent(mensaje)}`);
 }
+
+if(data.correo){
+window.open(`mailto:${data.correo}?body=${mensaje}`);
+}
+}
+
 }
 
 // ✅ LIMPIAR
 function limpiar(){
-cedula.value="";nombre.value="";celular.value="";
-correo.value="";nivel.value="";$("#carrera").val(null).trigger("change");
+cedula.value="";
+nombre.value="";
+celular.value="";
+correo.value="";
+nivel.value="";
+$("#carrera").val(null).trigger("change");
 }
 
 // ✅ TABLA
-db.ref("usuarios").on("value",s=>{
+db.ref("usuarios").on("value",snap=>{
 listaUsuarios=[];
-s.forEach(c=>listaUsuarios.push(c.val()));
+snap.forEach(c=>listaUsuarios.push(c.val()));
 mostrar(listaUsuarios);
 });
 
-function mostrar(d){
+function mostrar(datos){
 let html="";
-d.forEach(u=>{
-html+=`<tr>
+datos.forEach(u=>{
+html+=`
+<tr>
 <td>${u.cedula}</td>
 <td>${u.nombre}</td>
 <td>${u.carrera||""}</td>
 <td>
 <button onclick="editar('${u.cedula}')">✏️</button>
-<button onclick="eliminar('${u.cedula}')">🗑️</button>
+<button onclick="eliminar('${u.cedula}')" style="background:red">🗑️</button>
 </td>
 </tr>`;
 });
@@ -271,16 +324,23 @@ tablaUsuarios.innerHTML=html;
 
 function editar(c){
 let n=prompt("Nuevo nombre:");
-if(n) db.ref("usuarios/"+c).update({nombre:n.toUpperCase()});
+if(n){
+db.ref("usuarios/"+c).update({nombre:n.toUpperCase()});
+}
 }
 
 function eliminar(c){
-if(confirm("Eliminar?")) db.ref("usuarios/"+c).remove();
+if(confirm("Eliminar usuario?")){
+db.ref("usuarios/"+c).remove();
+}
 }
 
 function filtrar(){
 const t=buscador.value.toLowerCase();
-mostrar(listaUsuarios.filter(u=>u.nombre.toLowerCase().includes(t)||u.cedula.includes(t)));
+mostrar(listaUsuarios.filter(u=>
+u.nombre.toLowerCase().includes(t) ||
+u.cedula.includes(t)
+));
 }
 
 </script>
