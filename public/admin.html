@@ -12,59 +12,55 @@
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
 <!-- ✅ Select2 -->
-<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 
 <style>
 body{
-    margin:0;
-    font-family:Arial;
-
-    background:linear-gradient(135deg,#2c3e50,#d90429);
+  margin:0;
+  font-family:Arial;
+  background:linear-gradient(135deg,#2c3e50,#d90429);
 }
 .header{
-    background:#1d3b73;
-    color:white;
-    padding:15px;
-    text-align:center;
-
+  background:#1d3b73;
+  color:white;
+  padding:15px;
+  text-align:center;
+  font-weight:bold;
 }
-.container{
-    width:90%;
-    margin:auto;
-}
+.container{width:90%;margin:auto;}
 .card{
-    background:white;
-    padding:20px;
-    margin:20px;
-    border-radius:15px;
+  background:white;
+  padding:20px;
+  margin:20px;
+  border-radius:15px;
 }
 input,select{
-    padding:10px;
-    margin:5px;
-    border-radius:8px;
-
+  padding:10px;
+  margin:5px;
+  border-radius:8px;
+  border:1px solid #ccc;
 }
 button{
-    padding:10px;
-    background:#1d3b73;
-    color:white;
-    border:none;
-    border-radius:8px;
+  padding:10px;
+  background:#1d3b73;
+  color:white;
+  border:none;
+  border-radius:8px;
+  cursor:pointer;
 }
 table{
-    width:100%;
-    border-collapse:collapse;
+  width:100%;
+  border-collapse:collapse;
 }
 th{
-    background:#1d3b73;
-    color:white;
-    padding:10px;
+  background:#1d3b73;
+  color:white;
+  padding:10px;
 }
 td{
-    padding:10px;
-    text-align:center;
-
+  padding:10px;
+  text-align:center;
 }
 </style>
 
@@ -76,13 +72,11 @@ td{
 
 <div class="container">
 
-
+<!-- FORMULARIO -->
 <div class="card">
 
 <input id="cedula" placeholder="Cédula" oninput="this.value=this.value.replace(/[^0-9]/g,'')">
-
-<input id="nombre" placeholder="Nombre"
-oninput="this.value=this.value.toUpperCase().replace(/[^A-Z\s]/g,'')">
+<input id="nombre" placeholder="Nombre" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z\s]/g,'')">
 
 <select id="tipo">
 <option value="">Tipo</option>
@@ -109,18 +103,16 @@ oninput="this.value=this.value.toUpperCase().replace(/[^A-Z\s]/g,'')">
 <option value="TECNICO">TECNICO</option>
 </select>
 
-<select id="carrera" style="width:300px"></select>
+<select id="carrera" style="width:300px;"></select>
 
-<input id="celular" placeholder="Celular"
-oninput="this.value=this.value.replace(/[^0-9]/g,'')">
-
+<input id="celular" placeholder="Celular" oninput="this.value=this.value.replace(/[^0-9]/g,'')">
 <input id="correo" placeholder="Correo">
 
 <button onclick="registrar()">Registrar</button>
 
 </div>
 
-
+<!-- TABLA -->
 <div class="card">
 
 <input id="buscador" placeholder="🔎 Buscar..." onkeyup="filtrar()">
@@ -134,7 +126,9 @@ oninput="this.value=this.value.replace(/[^0-9]/g,'')">
 <th>Acción</th>
 </tr>
 </thead>
+
 <tbody id="tablaUsuarios"></tbody>
+
 </table>
 
 </div>
@@ -143,27 +137,33 @@ oninput="this.value=this.value.replace(/[^0-9]/g,'')">
 
 <script>
 
+// ✅ Firebase
+firebase.initializeApp({
+databaseURL:"https://torniquete-universidad-default-rtdb.firebaseio.com"
+});
+
+const db = firebase.database();
+
 // ✅ Mostrar tipo trabajador
 tipo.addEventListener("change",()=>{
 tipoTrabajador.style.display = (tipo.value==="TRABAJADOR")?"inline-block":"none";
 });
 
 // ✅ Activar Select2
-$(document).ready(function(){
-    $("#carrera").select2({
-        placeholder:"Seleccione programa"
-    });
+$(document).ready(()=>{
+$("#carrera").select2({
+placeholder:"Seleccione programa"
+});
 });
 
-// ✅ FUNCION CORRECTA SIN FALLAS
+// ✅ CARGAR CARRERAS SIN ERRORES
 function cargarCarreras(){
 
+let lista=[];
+const n = nivel.value;
 
-
-let lista = [];
-
-if(nivel.value === "PREGRADO"){
-lista = [
+if(n === "PREGRADO"){
+lista=[
 "ADMINISTRACION DE EMPRESAS",
 "CONTADURIA PUBLICA",
 "COMUNICACION SOCIAL PERIODISMO",
@@ -190,8 +190,8 @@ lista = [
 ];
 }
 
-else if(nivel.value === "POSGRADO"){
-lista = [
+else if(n === "POSGRADO"){
+lista=[
 "ESPECIALIZACION EN TRIBUTACION",
 "ESPECIALIZACION EN ALTA GERENCIA",
 "ESPECIALIZACION EN GERENCIA DEL TALENTO HUMANO",
@@ -217,12 +217,12 @@ lista = [
 ];
 }
 
-else if(nivel.value === "DIPLOMADO"){
-lista = ["DIPLOMADO EN CONTRATACION ESTATAL"];
+else if(n === "DIPLOMADO"){
+lista=["DIPLOMADO EN CONTRATACION ESTATAL"];
 }
 
-else if(nivel.value === "TECNICO"){
-lista = [
+else if(n === "TECNICO"){
+lista=[
 "TECNICO LABORAL EN AUXILIAR ADMINISTRATIVO",
 "TECNICO LABORAL EN AUXILIAR CONTABLE Y FINANCIERO",
 "TECNICO LABORAL EN AUXILIAR DE PRODUCCION GRAFICA Y ANIMACION DIGITAL",
@@ -230,31 +230,22 @@ lista = [
 ];
 }
 
-// ✅ cargar en select
+
 $("#carrera").empty().select2({
-data: lista.map(x => ({ id:x, text:x })),
-placeholder:"Buscar programa..."
+data: lista.map(x=>({id:x,text:x}))
 });
 
 }
 
-// ✅ Firebase
-firebase.initializeApp({
-databaseURL:"https://torniquete-universidad-default-rtdb.firebaseio.com"
-});
-const db = firebase.database();
-
-let listaUsuarios = [];
-
-// ✅ Registrar
+// ✅ REGISTRAR
 function registrar(){
 
-let exp = null;
+let exp=null;
 if(tipo.value==="VISITANTE"){
-exp = Date.now() + (8*60*60*1000);
+exp=Date.now()+8*60*60*1000;
 }
 
-const data = {
+const data={
 nombre:nombre.value,
 tipo:tipo.value,
 tipoTrabajador:tipoTrabajador.value||"",
@@ -269,21 +260,12 @@ db.ref("usuarios/"+cedula.value).update(data);
 
 alert("✅ Registrado");
 
-limpiar();
+
 }
 
+// ✅ TABLA
+let listaUsuarios=[];
 
-// ✅ limpiar
-function limpiar(){
-cedula.value="";
-nombre.value="";
-celular.value="";
-correo.value="";
-nivel.value="";
-$("#carrera").val(null).trigger("change");
-}
-
-// ✅ tabla
 db.ref("usuarios").on("value",snap=>{
 listaUsuarios=[];
 snap.forEach(c=>{
@@ -292,7 +274,7 @@ listaUsuarios.push({cedula:c.key,...c.val()});
 mostrar(listaUsuarios);
 });
 
-
+// ✅ MOSTRAR
 function mostrar(datos){
 let html="";
 datos.forEach(u=>{
@@ -302,26 +284,39 @@ html+=`
 <td>${u.nombre||""}</td>
 <td>${u.carrera||""}</td>
 <td>
+<button onclick="editar('${u.cedula}')">✏️</button>
 <button onclick="eliminar('${u.cedula}')">🗑️</button>
 </td>
-</tr>
-`;
+</tr>`;
 });
 tablaUsuarios.innerHTML=html;
 }
 
+// ✅ EDITAR
+function editar(c){
+let n=prompt("Nuevo nombre:");
+let car=prompt("Nueva carrera:");
+if(n){
+db.ref("usuarios/"+c).update({
+nombre:n.toUpperCase(),
+carrera:car||""
+});
+}
+}
 
+// ✅ ELIMINAR
 function eliminar(c){
 if(confirm("Eliminar?")){
 db.ref("usuarios/"+c).remove();
 }
 }
 
-
+// ✅ BUSCAR
 function filtrar(){
 const t=buscador.value.toLowerCase();
 mostrar(listaUsuarios.filter(u=>
-(u.nombre||"").toLowerCase().includes(t)||u.cedula.includes(t)
+(u.nombre||"").toLowerCase().includes(t) ||
+u.cedula.includes(t)
 ));
 }
 

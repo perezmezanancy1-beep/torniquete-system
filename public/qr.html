@@ -4,50 +4,51 @@
 <meta charset="UTF-8">
 
 <!-- ✅ Firebase -->
-<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js</script>
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
 
-<!-- ✅ QR -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<!-- ✅ QR LIBRERIA (CORREGIDO) -->
+.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
 <style>
 body{
-display:flex;
-justify-content:center;
-align-items:center;
-height:100vh;
-background:linear-gradient(135deg,#2c3e50,#d90429);
-font-family:Arial;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    height:100vh;
+    margin:0;
+    background:linear-gradient(#2c3e50,#d90429);
+    font-family:Arial;
 }
 
 
 .card{
-background:white;
-padding:20px;
-border-radius:20px;
-text-align:center;
-width:320px;
+    background:white;
+    padding:25px;
+    border-radius:20px;
+    width:320px;
+    text-align:center;
 }
 
-
+/* ✅ LOGO */
 .logo{
-width:80px;
-display:block;
-margin:auto;
-margin-bottom:10px;
+    width:80px;
+    display:block;
+    margin:auto;
+    margin-bottom:10px;
 }
 
 
 #qr{
-display:flex;
-justify-content:center;
-margin:15px;
+    display:flex;
+    justify-content:center;
+    margin:15px 0;
 }
 
-#timer{color:red;font-weight:bold;}
-
-
-
+#timer{
+    color:red;
+    font-weight:bold;
+}
 </style>
 
 </head>
@@ -56,8 +57,8 @@ margin:15px;
 
 <div class="card">
 
-<!-- ✅ LOGO -->
-<img src="img/logo1.png" class="logo">
+<!-- ✅ LOGO REAL -->
+img/logo1.png
 
 <h3>Universidad Autónoma del Caribe</h3>
 
@@ -91,92 +92,97 @@ margin:15px;
 
 
 
+
 <script>
 
 firebase.initializeApp({
 databaseURL:"https://torniquete-universidad-default-rtdb.firebaseio.com"
 });
 
-const db=firebase.database();
+const db = firebase.database();
 
 let user, cedula, intervaloQR;
 
 // ✅ LOGIN
 function login(){
 
-cedula=cedulaInput.value;
+    cedula = cedulaInput.value;
 
-db.ref("usuarios/"+cedula).once("value").then(s=>{
+    db.ref("usuarios/" + cedula).once("value").then(s=>{
 
-if(!s.exists()){
-alert("No existe");
-return;
-}
+        if(!s.exists()){
+            alert("No existe");
+            return;
+        }
 
-user=s.val();
+        user = s.val();
 
-// visitante
-if(user.tipo==="VISITANTE" && Date.now()>user.expiracion){
-loginBox.innerHTML="<h2>⛔ CADUCADO</h2>";
-return;
+        if(user.tipo==="VISITANTE" && Date.now()>user.expiracion){
+            loginBox.innerHTML="<h2 style='color:red'>⛔ CADUCADO</h2>";
+            return;
+        }
 
-}
-
-mostrar();
-
-});
+        mostrar();
+    });
 
 
 }
+
 
 // ✅ MOSTRAR
 function mostrar(){
 
-loginBox.style.display="none";
-qrView.style.display="block";
+    loginBox.style.display="none";
+    qrView.style.display="block";
 
-nombre.innerText=user.nombre;
-carrera.innerText=user.carrera||"";
-tipo.innerText="👤 "+user.tipo;
+    nombre.innerText = user.nombre;
+    carrera.innerText = user.carrera || "";
+    tipo.innerText = "👤 " + user.tipo;
 
-// tipo trabajador
-if(user.tipo==="TRABAJADOR"){
-detalle.innerText="🏷 "+(user.tipoTrabajador||"");
+    if(user.tipo==="TRABAJADOR"){
+        detalle.innerText="🏷 " + (user.tipoTrabajador || "");
+    }
+
+    estado.innerHTML="<span style='color:green'>✅ ACCESO PERMITIDO</span>";
+
+    generarQR();
+    intervaloQR = setInterval(generarQR, 30000);
+
 }
 
-estado.innerHTML="<span style='color:green'>✅ ACCESO PERMITIDO</span>";
-
-generarQR();
-intervaloQR=setInterval(generarQR,30000);
-}
-
-// ✅ QR dinámico
+// ✅ QR DINÁMICO
 function generarQR(){
 
-qr.innerHTML="";
+    qr.innerHTML="";
 
-new QRCode(qr,{
-text:cedula+"-"+Date.now(),
-width:200,
-height:200
-});
+    new QRCode(qr,{
+        text: cedula + "-" + Date.now(),
+        width:200,
+        height:200
+    });
 
 }
 
 // ✅ TIMER
 setInterval(()=>{
 
-if(user && user.tipo==="VISITANTE"){
+    if(user && user.tipo==="VISITANTE"){
 
-let r=user.expiracion-Date.now();
-let m=Math.floor(r/60000);
-let s=Math.floor((r%60000)/1000);
+        let r = user.expiracion - Date.now();
 
-timer.innerText=`⏳ ${m}m ${s}s`;
+        if(r<=0){
+            timer.innerText="⛔ Expirado";
+            return;
+        }
 
-}else if(user){
-timer.innerText="✅ Acceso permanente";
-}
+        let m = Math.floor(r/60000);
+        let s = Math.floor((r%60000)/1000);
+
+        timer.innerText=`⏳ ${m}m ${s}s`;
+
+    }else if(user){
+        timer.innerText="✅ Acceso permanente";
+    }
 
 },1000);
 
@@ -184,3 +190,4 @@ timer.innerText="✅ Acceso permanente";
 
 </body>
 </html>
+
