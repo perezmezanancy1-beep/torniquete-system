@@ -12,7 +12,7 @@
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
 <!-- ✅ Select2 -->
-<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 
 <style>
@@ -27,7 +27,7 @@ body{
     color:white;
     padding:15px;
     text-align:center;
-    font-weight:bold;
+
 }
 .container{
     width:90%;
@@ -43,16 +43,14 @@ input,select{
     padding:10px;
     margin:5px;
     border-radius:8px;
-    border:1px solid #ccc;
+
 }
 button{
-    padding:10px 15px;
-    border:none;
-    border-radius:8px;
+    padding:10px;
     background:#1d3b73;
     color:white;
-
-    cursor:pointer;
+    border:none;
+    border-radius:8px;
 }
 table{
     width:100%;
@@ -66,10 +64,7 @@ th{
 td{
     padding:10px;
     text-align:center;
-    border-bottom:1px solid #ddd;
-}
-#buscador{
-    width:50%;
+
 }
 </style>
 
@@ -77,24 +72,33 @@ td{
 
 <body>
 
-<div class="header">
-Panel Administrativo - Universidad
-</div>
+<div class="header">Panel Administrativo</div>
 
 <div class="container">
 
-<!-- FORMULARIO -->
+
 <div class="card">
 
+<input id="cedula" placeholder="Cédula" oninput="this.value=this.value.replace(/[^0-9]/g,'')">
 
-<input id="cedula" placeholder="Cédula" oninput="soloNumeros(this)">
-<input id="nombre" placeholder="Nombre" oninput="formatoNombre(this)">
+<input id="nombre" placeholder="Nombre"
+oninput="this.value=this.value.toUpperCase().replace(/[^A-Z\s]/g,'')">
 
 <select id="tipo">
 <option value="">Tipo</option>
 <option>ESTUDIANTE</option>
 <option>TRABAJADOR</option>
 <option>VISITANTE</option>
+</select>
+
+<select id="tipoTrabajador" style="display:none">
+<option value="">Tipo trabajador</option>
+<option>DOCENTE</option>
+<option>ADMINISTRATIVO</option>
+<option>SEGURIDAD</option>
+<option>MANTENIMIENTO</option>
+<option>COMERCIANTE</option>
+<option>LIMPIEZA</option>
 </select>
 
 <select id="nivel" onchange="cargarCarreras()">
@@ -107,14 +111,16 @@ Panel Administrativo - Universidad
 
 <select id="carrera" style="width:300px"></select>
 
-<input id="celular" placeholder="Celular" oninput="soloNumeros(this)">
+<input id="celular" placeholder="Celular"
+oninput="this.value=this.value.replace(/[^0-9]/g,'')">
+
 <input id="correo" placeholder="Correo">
 
-<button onclick="confirmar()">Registrar</button>
+<button onclick="registrar()">Registrar</button>
 
 </div>
 
-<!-- TABLA -->
+
 <div class="card">
 
 <input id="buscador" placeholder="🔎 Buscar..." onkeyup="filtrar()">
@@ -137,37 +143,26 @@ Panel Administrativo - Universidad
 
 <script>
 
-const firebaseConfig = {
-  apiKey: "AIzaSy...",
-  authDomain: "torniquete-universidad.firebaseapp.com",
-  databaseURL: "https://torniquete-universidad-default-rtdb.firebaseio.com",
-  projectId: "torniquete-universidad"
-};
+// ✅ Mostrar tipo trabajador
+tipo.addEventListener("change",()=>{
+tipoTrabajador.style.display = (tipo.value==="TRABAJADOR")?"inline-block":"none";
+});
 
-firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
+// ✅ Activar Select2
+$(document).ready(function(){
+    $("#carrera").select2({
+        placeholder:"Seleccione programa"
+    });
+});
 
-let listaUsuarios = [];
-
-// ✅ VALIDACIONES
-function soloNumeros(input){
-    input.value = input.value.replace(/[^0-9]/g,'');
-}
-
-function formatoNombre(input){
-    input.value = input.value.toUpperCase()
-    .normalize("NFD").replace(/[\u0300-\u036f]/g,"")
-    .replace(/[^A-Z\s]/g,'');
-}
-
-// ✅ SELECT CON BUSCADOR
+// ✅ FUNCION CORRECTA SIN FALLAS
 function cargarCarreras(){
 
-const nivel = document.getElementById("nivel").value;
+
 
 let lista = [];
 
-if(nivel === "PREGRADO"){
+if(nivel.value === "PREGRADO"){
 lista = [
 "ADMINISTRACION DE EMPRESAS",
 "CONTADURIA PUBLICA",
@@ -195,7 +190,7 @@ lista = [
 ];
 }
 
-else if(nivel === "POSGRADO"){
+else if(nivel.value === "POSGRADO"){
 lista = [
 "ESPECIALIZACION EN TRIBUTACION",
 "ESPECIALIZACION EN ALTA GERENCIA",
@@ -203,11 +198,12 @@ lista = [
 "ESPECIALIZACION EN GERENCIA DE PRODUCCION Y OPERACIONES LOGISTICAS",
 "ESPECIALIZACION EN FINANZAS",
 "ESPECIALIZACION EN GERENCIA DE MERCADEO",
-"ESPECIALIZACION EN GESTION DE SEGURIDAD Y SALUD EN EL TRABAJO",
+"ESPECIALIZACION EN GESTION DE LA SEGURIDAD Y SALUD EN EL TRABAJO",
 "ESPECIALIZACION EN GERENCIA DE LA COMUNICACION ESTRATEGICA",
 "ESPECIALIZACION EN ASEGURAMIENTO DE LA INFORMACION FINANCIERA",
 "ESPECIALIZACION EN GERENCIA DE PROYECTOS",
 "ESPECIALIZACION EN INTELIGENCIA ARTIFICIAL",
+
 "MAESTRIA EN INGENIERIA MECANICA",
 "MAESTRIA EN MERCADEO",
 "MAESTRIA EN SISTEMAS DE GESTION",
@@ -221,11 +217,11 @@ lista = [
 ];
 }
 
-else if(nivel === "DIPLOMADO"){
+else if(nivel.value === "DIPLOMADO"){
 lista = ["DIPLOMADO EN CONTRATACION ESTATAL"];
 }
 
-else if(nivel === "TECNICO"){
+else if(nivel.value === "TECNICO"){
 lista = [
 "TECNICO LABORAL EN AUXILIAR ADMINISTRATIVO",
 "TECNICO LABORAL EN AUXILIAR CONTABLE Y FINANCIERO",
@@ -234,149 +230,99 @@ lista = [
 ];
 }
 
-let data = lista.map(x => ({id:x, text:x}));
-
+// ✅ cargar en select
 $("#carrera").empty().select2({
-    data:data,
-    placeholder:"Buscar programa...",
-    allowClear:true
+data: lista.map(x => ({ id:x, text:x })),
+placeholder:"Buscar programa..."
 });
 
 }
 
-// ✅ INICIAR SELECT2
-$(document).ready(function(){
-    $("#carrera").select2({
-        placeholder:"Seleccione programa"
-    });
+// ✅ Firebase
+firebase.initializeApp({
+databaseURL:"https://torniquete-universidad-default-rtdb.firebaseio.com"
 });
+const db = firebase.database();
 
-// ✅ REGISTRAR
-function confirmar(){
-    if(confirm("¿Datos correctos?")){
-        registrar();
-    }
-}
+let listaUsuarios = [];
 
+// ✅ Registrar
 function registrar(){
 
 let exp = null;
-
-if(tipo.value === "VISITANTE"){
-    exp = Date.now() + (8 * 60 * 60 * 1000);
+if(tipo.value==="VISITANTE"){
+exp = Date.now() + (8*60*60*1000);
 }
 
 const data = {
-    nombre: nombre.value,
-    tipo: tipo.value,
-    nivel: nivel.value,
-    carrera: $("#carrera").val(),
-    celular: celular.value,
-    correo: correo.value,
-    expiracion: exp
+nombre:nombre.value,
+tipo:tipo.value,
+tipoTrabajador:tipoTrabajador.value||"",
+nivel:nivel.value,
+carrera:$("#carrera").val(),
+celular:celular.value,
+correo:correo.value,
+expiracion:exp
 };
 
-if(!cedula.value || !nombre.value){
-    alert("Faltan datos");
-    return;
-}
-
-db.ref("usuarios/" + cedula.value).update(data);
+db.ref("usuarios/"+cedula.value).update(data);
 
 alert("✅ Registrado");
 
 limpiar();
-
-// ✅ ENVÍO
-const mensaje = "Acceso QR: https://torniquete-system.onrender.com/qr.html";
-
-if(data.tipo === "VISITANTE"){
-
-    if(data.celular){
-        window.open(`https://wa.me/57${data.celular}?text=${encodeURIComponent(mensaje)}`);
-    }
-
-    if(data.correo){
-        window.location.href = `mailto:${data.correo}?subject=QR&body=${encodeURIComponent(mensaje)}`;
-    }
 }
 
-}
 
-// ✅ LIMPIAR
+// ✅ limpiar
 function limpiar(){
-    cedula.value="";
-    nombre.value="";
-    celular.value="";
-    correo.value="";
-    nivel.value="";
-    $("#carrera").val(null).trigger("change");
+cedula.value="";
+nombre.value="";
+celular.value="";
+correo.value="";
+nivel.value="";
+$("#carrera").val(null).trigger("change");
 }
 
-// ✅ CARGAR TABLA (ARREGLADO)
-db.ref("usuarios").on("value", snapshot => {
-
-    listaUsuarios = [];
-
-    snapshot.forEach(child => {
-        listaUsuarios.push({
-            cedula: child.key,
-            ...child.val()
-        });
-    });
-
-    mostrar(listaUsuarios);
+// ✅ tabla
+db.ref("usuarios").on("value",snap=>{
+listaUsuarios=[];
+snap.forEach(c=>{
+listaUsuarios.push({cedula:c.key,...c.val()});
+});
+mostrar(listaUsuarios);
 });
 
-// ✅ MOSTRAR
+
 function mostrar(datos){
-
-let html = "";
-
+let html="";
 datos.forEach(u=>{
-html += `
+html+=`
 <tr>
 <td>${u.cedula}</td>
-<td>${u.nombre || ""}</td>
-<td>${u.carrera || ""}</td>
+<td>${u.nombre||""}</td>
+<td>${u.carrera||""}</td>
 <td>
-<button onclick="editar('${u.cedula}')">✏️</button>
-<button onclick="eliminar('${u.cedula}')" style="background:red">🗑️</button>
+<button onclick="eliminar('${u.cedula}')">🗑️</button>
 </td>
 </tr>
 `;
 });
-
-tablaUsuarios.innerHTML = html;
+tablaUsuarios.innerHTML=html;
 }
 
-// ✅ EDITAR
-function editar(c){
-    let n = prompt("Nuevo nombre:");
-    if(n){
-        db.ref("usuarios/" + c).update({nombre:n.toUpperCase()});
-    }
-}
 
-// ✅ ELIMINAR
 function eliminar(c){
-    if(confirm("Eliminar usuario?")){
-        db.ref("usuarios/" + c).remove();
-    }
+if(confirm("Eliminar?")){
+db.ref("usuarios/"+c).remove();
+}
 }
 
-// ✅ BUSCAR
+
 function filtrar(){
-
-const texto = buscador.value.toLowerCase();
-
-const filtrados = listaUsuarios.filter(u =>
-    (u.nombre || "").toLowerCase().includes(texto) ||
-    u.cedula.includes(texto)
-);
-
-mostrar(filtrados);
-
+const t=buscador.value.toLowerCase();
+mostrar(listaUsuarios.filter(u=>
+(u.nombre||"").toLowerCase().includes(t)||u.cedula.includes(t)
+));
 }
 
 </script>
