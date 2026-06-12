@@ -8,57 +8,46 @@
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
 
 <!-- ✅ QR -->
-https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
 <style>
 body{
-    margin:0;
-    display:flex;
-    justify-content:center;
-    align-items:center;
-    height:100vh;
-    background:linear-gradient(135deg,#2c3e50,#d90429);
-    font-family:Arial;
+display:flex;
+justify-content:center;
+align-items:center;
+height:100vh;
+background:linear-gradient(135deg,#2c3e50,#d90429);
+font-family:Arial;
 }
 
 
 .card{
-    background:white;
-    padding:25px;
-    border-radius:20px;
-    width:330px;
-    text-align:center;
+background:white;
+padding:20px;
+border-radius:20px;
+text-align:center;
+width:320px;
 }
 
-/* ✅ LOGO CENTRADO */
+
 .logo{
-    width:80px;
-    display:block;
-    margin:auto;
-    margin-bottom:10px;
+width:80px;
+display:block;
+margin:auto;
+margin-bottom:10px;
 }
 
-/* ✅ QR CENTRADO */
+
 #qr{
-    display:flex;
-    justify-content:center;
-    margin:15px 0;
+display:flex;
+justify-content:center;
+margin:15px;
 }
 
-#estado{
-    font-weight:bold;
-    margin:10px;
-}
+#timer{color:red;font-weight:bold;}
 
-#timer{
-    color:red;
-    font-weight:bold;
-}
 
-#hora{
-    color:#555;
-    font-size:14px;
-}
+
 </style>
 
 </head>
@@ -68,30 +57,29 @@ body{
 <div class="card">
 
 <!-- ✅ LOGO -->
-img/logo1.png
+<img src="img/logo1.png" class="logo">
 
 <h3>Universidad Autónoma del Caribe</h3>
 
-<!-- LOGIN -->
+
 <div id="loginBox">
-    <input id="cedulaInput" placeholder="Cédula"><br><br>
-    <button onclick="login()">Ingresar</button>
+<input id="cedulaInput" placeholder="Cédula"><br><br>
+<button onclick="login()">Ingresar</button>
 </div>
 
-<!-- QR -->
+
 <div id="qrView" style="display:none">
 
 <h3 id="nombre"></h3>
 <p id="carrera"></p>
-
-<p id="tipoUsuario"></p>
-<p id="detalleTrabajador"></p>
+<p id="tipo"></p>
+<p id="detalle"></p>
 
 <div id="estado"></div>
 
 <div id="qr"></div>
 
-<p id="hora"></p>
+
 <p id="timer"></p>
 
 </div>
@@ -102,35 +90,36 @@ img/logo1.png
 
 
 
+
 <script>
 
 firebase.initializeApp({
 databaseURL:"https://torniquete-universidad-default-rtdb.firebaseio.com"
 });
-const db = firebase.database();
 
-let usuario, cedula, intervalo, intervaloQR;
+const db=firebase.database();
+
+let user, cedula, intervaloQR;
 
 // ✅ LOGIN
 function login(){
 
-cedula = cedulaInput.value;
+cedula=cedulaInput.value;
 
 db.ref("usuarios/"+cedula).once("value").then(s=>{
 
 if(!s.exists()){
-alert("❌ Usuario no registrado");
+alert("No existe");
 return;
 }
 
-usuario = s.val();
+user=s.val();
 
-// ✅ VALIDAR VISITANTE
-if(usuario.tipo==="VISITANTE"){
-if(!usuario.expiracion || Date.now()>usuario.expiracion){
-bloquear("QR expirado (8h)");
+// visitante
+if(user.tipo==="VISITANTE" && Date.now()>user.expiracion){
+loginBox.innerHTML="<h2>⛔ CADUCADO</h2>";
 return;
-}
+
 }
 
 mostrar();
@@ -146,24 +135,19 @@ function mostrar(){
 loginBox.style.display="none";
 qrView.style.display="block";
 
-nombre.innerText = usuario.nombre || "";
-carrera.innerText = usuario.carrera || "";
+nombre.innerText=user.nombre;
+carrera.innerText=user.carrera||"";
+tipo.innerText="👤 "+user.tipo;
 
-tipoUsuario.innerHTML = "👤 " + usuario.tipo;
-
-// ✅ tipo trabajador
-if(usuario.tipo==="TRABAJADOR" && usuario.tipoTrabajador){
-detalleTrabajador.innerHTML = "🏷 " + usuario.tipoTrabajador;
-} else {
-detalleTrabajador.innerHTML = "";
+// tipo trabajador
+if(user.tipo==="TRABAJADOR"){
+detalle.innerText="🏷 "+(user.tipoTrabajador||"");
 }
 
-estado.innerHTML = "<span style='color:green'>✅ ACCESO PERMITIDO</span>";
+estado.innerHTML="<span style='color:green'>✅ ACCESO PERMITIDO</span>";
 
 generarQR();
-intervaloQR = setInterval(generarQR,30000);
-intervalo = setInterval(timer,1000);
-
+intervaloQR=setInterval(generarQR,30000);
 }
 
 // ✅ QR dinámico
@@ -172,48 +156,29 @@ function generarQR(){
 qr.innerHTML="";
 
 new QRCode(qr,{
-text: cedula + "-" + Date.now(),
+text:cedula+"-"+Date.now(),
 width:200,
 height:200
 });
 
 }
 
-// ✅ reloj + expiración
-function timer(){
+// ✅ TIMER
+setInterval(()=>{
 
-let now = new Date();
-hora.innerText = "🕒 " + now.toLocaleTimeString();
+if(user && user.tipo==="VISITANTE"){
 
-// visitante
-if(usuario.tipo==="VISITANTE"){
+let r=user.expiracion-Date.now();
+let m=Math.floor(r/60000);
+let s=Math.floor((r%60000)/1000);
 
-let r = usuario.expiracion - Date.now();
+timer.innerText=`⏳ ${m}m ${s}s`;
 
-if(r<=0){
-bloquear("QR expirado");
-clearInterval(intervalo);
-return;
+}else if(user){
+timer.innerText="✅ Acceso permanente";
 }
 
-let m = Math.floor(r/60000);
-let s = Math.floor((r%60000)/1000);
-
-timer.innerText = `⏳ ${m}m ${s}s`;
-
-}else{
-timer.innerHTML = "<span style='color:green'>✅ Acceso permanente</span>";
-}
-
-}
-
-// ✅ bloquear
-function bloquear(msg){
-loginBox.innerHTML = `
-<h2 style="color:red">⛔ ACCESO DENEGADO</h2>
-<p>${msg}</p>
-`;
-}
+},1000);
 
 </script>
 
