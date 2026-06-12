@@ -4,20 +4,25 @@
 <meta charset="UTF-8">
 <title>Panel Administrativo</title>
 
-https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
-www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+<!-- ✅ Firebase -->
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+
+<!-- ✅ jQuery + Select2 -->
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 
 <style>
-body {margin:0;font-family:Arial;background:linear-gradient(135deg,#2c3e50,#d90429);}
-.header {background:#1d3b73;color:white;padding:15px;text-align:center;font-size:20px;font-weight:bold;}
-.container {width:90%;margin:auto;margin-top:20px;}
-.card {background:white;padding:20px;border-radius:15px;margin-bottom:20px;}
-input,select {padding:10px;margin:5px;border-radius:8px;border:1px solid #ccc;}
-button {padding:10px 15px;border:none;border-radius:8px;cursor:pointer;background:#1d3b73;color:white;}
+body {font-family:Arial;margin:0;background:linear-gradient(135deg,#2c3e50,#d90429);}
+.header {background:#1d3b73;color:white;padding:15px;text-align:center;}
+.container {width:90%;margin:auto;}
+.card {background:white;padding:20px;margin:20px;border-radius:15px;}
+input,select,button {padding:10px;margin:5px;border-radius:8px;}
+button {background:#1d3b73;color:white;border:none;}
 table {width:100%;border-collapse:collapse;}
 th {background:#1d3b73;color:white;padding:10px;}
-td {padding:10px;text-align:center;border-bottom:1px solid #ddd;}
-#buscador {width:50%;}
+td {padding:10px;text-align:center;}
 </style>
 </head>
 
@@ -27,8 +32,9 @@ td {padding:10px;text-align:center;border-bottom:1px solid #ddd;}
 
 <div class="container">
 
+<!-- REGISTRO -->
 <div class="card">
-<h3>Registrar Usuario</h3>
+
 
 <input id="cedula" placeholder="Cédula" oninput="soloNumeros(this)">
 <input id="nombre" placeholder="Nombre" oninput="formatoNombre(this)">
@@ -43,22 +49,23 @@ td {padding:10px;text-align:center;border-bottom:1px solid #ddd;}
 <select id="nivel" onchange="cargarCarreras()">
 <option value="">Nivel</option>
 <option value="PREGRADO">PREGRADO</option>
-<option value="ESPECIALIZACION">ESPECIALIZACIÓN</option>
-<option value="MAESTRIA">MAESTRÍA</option>
+<option value="POSGRADO">POSGRADO</option>
 <option value="DIPLOMADO">DIPLOMADO</option>
 <option value="TECNICO">TÉCNICO</option>
 </select>
 
-<select id="carrera"></select>
+<select id="carrera" style="width:300px"></select>
 
 <input id="celular" placeholder="Celular" oninput="soloNumeros(this)">
 <input id="correo" placeholder="Correo">
 
 <button onclick="confirmar()">Registrar</button>
+
 </div>
 
+<!-- TABLA -->
 <div class="card">
-<input id="buscador" placeholder="🔎 Buscar..." onkeyup="filtrar()">
+<input id="buscador" placeholder="Buscar..." onkeyup="filtrar()">
 <table>
 <thead>
 <tr>
@@ -74,10 +81,10 @@ td {padding:10px;text-align:center;border-bottom:1px solid #ddd;}
 <script>
 
 const firebaseConfig = {
-  apiKey: "AIzaSy...",
-  authDomain: "torniquete-universidad.firebaseapp.com",
-  databaseURL: "https://torniquete-universidad-default-rtdb.firebaseio.com",
-  projectId: "torniquete-universidad"
+apiKey: "AIzaSy...",
+authDomain: "torniquete-universidad.firebaseapp.com",
+databaseURL: "https://torniquete-universidad-default-rtdb.firebaseio.com",
+projectId: "torniquete-universidad"
 };
 
 firebase.initializeApp(firebaseConfig);
@@ -85,6 +92,7 @@ const db = firebase.database();
 
 let listaUsuarios=[];
 
+// ✅ VALIDACIONES
 function soloNumeros(i){i.value=i.value.replace(/[^0-9]/g,'');}
 
 function formatoNombre(i){
@@ -93,25 +101,103 @@ i.value=i.value.toUpperCase()
 .replace(/[^A-Z\s]/g,'');
 }
 
-function mensaje(t){alert(t);}
-
-function limpiar(){
-cedula.value="";nombre.value="";celular.value="";
-correo.value="";carrera.innerHTML="";nivel.value="";tipo.value="";
-}
-
+// ✅ SELECT MODERNO
 function cargarCarreras(){
+
 const nivel=document.getElementById("nivel").value;
-const c=document.getElementById("carrera");
 
-let op=[];
+let data=[];
 
-if(nivel==="PREGRADO"){op=["ADMINISTRACION DE EMPRESAS","CONTADURIA PUBLICA","INGENIERIA DE SISTEMAS"];}
-
-c.innerHTML="<option>Seleccione</option>";
-op.forEach(o=>c.innerHTML+=`<option>${o}</option>`);
+if(nivel==="PREGRADO"){
+data=[
+{ text:"ADMINISTRACION DE EMPRESAS"},
+{ text:"CONTADURIA PUBLICA"},
+{ text:"COMUNICACION SOCIAL PERIODISMO"},
+{ text:"ADMINISTRACION DE EMPRESAS TURISTICAS Y HOTELERAS"},
+{ text:"INGENIERIA INDUSTRIAL"},
+{ text:"INGENIERIA MECANICA"},
+{ text:"DERECHO"},
+{ text:"NEGOCIOS Y FINANZAS INTERNACIONALES"},
+{ text:"PSICOLOGIA"},
+{ text:"INGENIERIA MECATRONICA"},
+{ text:"ADMINISTRACION MARITIMA Y FLUVIAL"},
+{ text:"DISEÑO GRAFICO"},
+{ text:"DISEÑO DE ESPACIOS"},
+{ text:"DISEÑO DE MODAS"},
+{ text:"DEPORTE Y CULTURA FISICA"},
+{ text:"CIENCIAS POLITICAS"},
+{ text:"COMUNICACION AUDIOVISUAL"},
+{ text:"TECNICA PROFESIONAL EN OPERACIONES LOGISTICAS"},
+{ text:"INGENIERIA ELECTRONICA"},
+{ text:"INGENIERIA EN ANALITICA DE DATOS"},
+{ text:"NEGOCIOS DIGITALES"},
+{ text:"ARQUITECTURA"},
+{ text:"INGENIERIA DE SISTEMAS"}
+];
 }
 
+// ✅ POSGRADO ANIDADO
+else if(nivel==="POSGRADO"){
+data=[
+{
+text:"ESPECIALIZACIONES",
+children:[
+{ text:"ESPECIALIZACION EN TRIBUTACION"},
+{ text:"ESPECIALIZACION EN ALTA GERENCIA"},
+{ text:"ESPECIALIZACION EN GERENCIA DEL TALENTO HUMANO"},
+{ text:"ESPECIALIZACION EN GERENCIA DE PRODUCCION Y OPERACIONES LOGISTICAS"},
+{ text:"ESPECIALIZACION EN FINANZAS"},
+{ text:"ESPECIALIZACION EN GERENCIA DE MERCADEO"},
+{ text:"ESPECIALIZACION EN SEGURIDAD Y SALUD EN EL TRABAJO"},
+{ text:"ESPECIALIZACION EN GERENCIA DE LA COMUNICACION"},
+{ text:"ESPECIALIZACION EN GERENCIA DE PROYECTOS"},
+{ text:"ESPECIALIZACION EN INTELIGENCIA ARTIFICIAL"}
+]
+},
+{
+text:"MAESTRIAS",
+children:[
+{ text:"MAESTRIA EN INGENIERIA MECANICA"},
+{ text:"MAESTRIA EN MERCADEO"},
+{ text:"MAESTRIA EN SISTEMAS DE GESTION"},
+{ text:"MAESTRIA EN LOGISTICA INTEGRAL"},
+{ text:"MAESTRIA EN EDUCACION"},
+{ text:"MAESTRIA EN FINANZAS"},
+{ text:"MAESTRIA EN ADMINISTRACION MBA"},
+{ text:"MAESTRIA EN GERENCIA TRIBUTARIA"}
+]
+}
+];
+}
+
+else if(nivel==="DIPLOMADO"){
+data=[{ text:"DIPLOMADO EN CONTRATACION ESTATAL"}];
+}
+
+else if(nivel==="TECNICO"){
+data=[
+{ text:"TECNICO LABORAL EN AUXILIAR ADMINISTRATIVO"},
+{ text:"TECNICO LABORAL EN AUXILIAR CONTABLE Y FINANCIERO"},
+{ text:"TECNICO LABORAL EN PRODUCCION GRAFICA"},
+{ text:"TECNICO LABORAL EN ENERGIA SOLAR"}
+];
+}
+
+$("#carrera").empty().select2({
+data:data,
+placeholder:"Seleccione programa",
+width:"300px"
+});
+}
+
+// ✅ INIT SELECT2
+$(document).ready(function(){
+$("#carrera").select2({
+placeholder:"Seleccione programa"
+});
+});
+
+// ✅ REGISTRO
 function confirmar(){
 if(confirm("¿Datos correctos?")) registrar();
 }
@@ -119,6 +205,7 @@ if(confirm("¿Datos correctos?")) registrar();
 function registrar(){
 
 let exp=null;
+
 if(tipo.value==="VISITANTE"){
 exp=Date.now()+(8*60*60*1000);
 }
@@ -128,35 +215,38 @@ cedula:cedula.value,
 nombre:nombre.value,
 tipo:tipo.value,
 nivel:nivel.value,
-carrera:carrera.value,
+carrera:$("#carrera").val(),
 celular:celular.value,
 correo:correo.value,
-fecha:Date.now(),
-expiracion:exp
+expiracion:exp,
 };
 
-if(!data.cedula||!data.nombre||!data.tipo){
-mensaje("Faltan datos");return;
-}
-
-db.ref("usuarios/"+data.cedula).once("value",snap=>{
-if(snap.exists()){mensaje("Existe");return;}
+if(!data.cedula||!data.nombre){alert("Faltan datos");return;}
 
 db.ref("usuarios/"+data.cedula).set(data);
-mensaje("✅ Registrado");
+
+alert("✅ Registrado");
+
 limpiar();
 
 if(data.tipo==="VISITANTE"){
-const msg="QR válido 8h: https://torniquete-system.onrender.com/qr.html";
+const msg="Acceso QR: https://torniquete-system.onrender.com/qr.html";
 
-if(data.celular)window.open(`https://wa.me/57${data.celular}?text=${msg}`);
-if(data.correo)window.open(`mailto:${data.correo}?body=${msg}`);
+if(data.celular)
+window.open(`https://wa.me/57${data.celular}?text=${encodeURIComponent(msg)}`);
+
+if(data.correo)
+window.open(`mailto:${data.correo}?body=${msg}`);
+}
 }
 
-});
-
+// ✅ LIMPIAR
+function limpiar(){
+cedula.value="";nombre.value="";celular.value="";
+correo.value="";nivel.value="";$("#carrera").val(null).trigger("change");
 }
 
+// ✅ TABLA
 db.ref("usuarios").on("value",s=>{
 listaUsuarios=[];
 s.forEach(c=>listaUsuarios.push(c.val()));
@@ -180,14 +270,12 @@ tablaUsuarios.innerHTML=html;
 }
 
 function editar(c){
-const n=prompt("Nombre").toUpperCase();
-if(n) db.ref("usuarios/"+c).update({nombre:n});
+let n=prompt("Nuevo nombre:");
+if(n) db.ref("usuarios/"+c).update({nombre:n.toUpperCase()});
 }
 
 function eliminar(c){
-if(confirm("Eliminar?")){
-db.ref("usuarios/"+c).remove();
-}
+if(confirm("Eliminar?")) db.ref("usuarios/"+c).remove();
 }
 
 function filtrar(){
