@@ -41,8 +41,7 @@ body{
 
 #qr{
     margin:20px auto;
-    display:flex;
-    justify-content:center;
+
 }
 
 #nombre{
@@ -72,7 +71,7 @@ body{
 
 <div class="card">
 
-
+<!-- ✅ LOGO (IMPORTANTE) -->
 <img src="img/logo1.png" class="logo">
 
 <h3>Universidad Autónoma del Caribe</h3>
@@ -83,7 +82,7 @@ body{
 <button onclick="login()">Ingresar</button>
 </div>
 
-<!-- ✅ VISTA QR -->
+<!-- ✅ QR -->
 <div id="qrView" style="display:none">
 
 <h3 id="nombre"></h3>
@@ -100,12 +99,15 @@ body{
 
 </div>
 
-<!-- ✅ SONIDO -->
-<audio id="beep" src="sounds/beep.mp3"></audio>
+<!-- ✅ AUDIO CORRECTO -->
+<audio id="beep">
+    <source src="sounds/beep.mp3" type="audio/mpeg">
+</audio>
 
 <script>
 
-// ✅ Firebase
+
+
 firebase.initializeApp({
  databaseURL:"https://torniquete-universidad-default-rtdb.firebaseio.com"
 });
@@ -114,9 +116,9 @@ const db = firebase.database();
 
 let usuario;
 let cedula;
-let inicioQR=0;
+let inicioQR = 0;
 
-// ✅ LOGIN CON CONTROL DE VISITANTE
+// ✅ LOGIN CON CONTROL VISITANTE
 function login(){
 
     cedula = document.getElementById("cedulaInput").value.trim();
@@ -136,7 +138,10 @@ function login(){
 
         usuario = s.val();
 
-        // ✅ VALIDAR VISITANTE (7 HORAS)
+        // 🔓 desbloquear audio en navegador
+        document.getElementById("beep").play().catch(()=>{});
+
+        // ✅ VISITANTE 7 HORAS
         if(usuario.tipo === "VISITANTE"){
 
             let ahora = Date.now();
@@ -150,7 +155,7 @@ function login(){
             }
 
             if(ahora - usuario.inicio > limite){
-                alert("⛔ Acceso denegado: tiempo expirado (7 horas)");
+                alert("⛔ Acceso denegado (visitante expirado)");
                 return;
             }
         }
@@ -159,7 +164,7 @@ function login(){
     });
 }
 
-// ✅ MOSTRAR INTERFAZ
+// ✅ MOSTRAR
 function mostrar(){
 
     document.getElementById("loginBox").style.display="none";
@@ -168,15 +173,15 @@ function mostrar(){
     document.getElementById("nombre").innerText = usuario.nombre || "";
     document.getElementById("carrera").innerText = usuario.carrera || "";
 
-    // ✅ TIPO
+
     document.getElementById("tipo").innerText =
         "👤 " + (usuario.tipo || "USUARIO");
 
-    // ✅ ESTADO
+
     if(usuario.tipo === "VISITANTE"){
         document.getElementById("estado").innerHTML =
             "<span style='color:orange'>⏳ Visitante activo</span>";
-    }else{
+    } else {
         document.getElementById("estado").innerHTML =
             "<span style='color:green'>✅ Acceso permanente</span>";
     }
@@ -184,11 +189,11 @@ function mostrar(){
     generarQR();
 }
 
-// ✅ GENERAR QR
+// ✅ QR DINÁMICO (SOLO NÚMEROS)
 function generarQR(){
 
     inicioQR = Date.now();
-
+    
 
     const data = cedula + inicioQR;
 
@@ -200,8 +205,9 @@ function generarQR(){
         height:200
     });
 
-
-    document.getElementById("beep").play();
+    const audio = document.getElementById("beep");
+    audio.currentTime = 0;
+    audio.play().catch(()=>{});
 }
 
 // ✅ CONTADOR + TIEMPO VISITANTE
@@ -209,7 +215,7 @@ setInterval(()=>{
 
     if(!usuario) return;
 
-    // ✅ contador QR
+    // QR TIMER
     let restante = 30000 - (Date.now() - inicioQR);
 
     if(restante <= 0){
@@ -218,9 +224,9 @@ setInterval(()=>{
     }
 
     document.getElementById("timer").innerText =
-    "⏳ Nuevo QR en: " + Math.floor(restante/1000) + "s";
+        "⏳ Nuevo QR en: " + Math.floor(restante/1000) + "s";
 
-    // ✅ VISITANTE TIEMPO RESTANTE
+    // VISITANTE TIMER
     if(usuario.tipo === "VISITANTE" && usuario.inicio){
 
         let total = 7 * 60 * 60 * 1000;
