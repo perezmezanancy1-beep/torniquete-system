@@ -3,11 +3,11 @@
 <head>
 <meta charset="UTF-8">
 
-<!-- Firebase -->
+<!-- ✅ Firebase -->
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
 
-<!-- QR -->
+<!-- ✅ QR -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
 <style>
@@ -21,6 +21,7 @@ body{
     background:linear-gradient(135deg,#2c3e50,#d90429);
     font-family:Arial;
 }
+
 .card{
     background:white;
     padding:25px;
@@ -28,13 +29,41 @@ body{
     width:320px;
     text-align:center;
 
+    display:flex;
+    flex-direction:column;
+    align-items:center;
 }
+
 .logo{
     width:80px;
     margin-bottom:10px;
 }
-#qr{margin:15px;}
-#timer{color:red;font-weight:bold;}
+
+#qr{
+    margin:20px auto;
+    display:flex;
+    justify-content:center;
+}
+
+#nombre{
+    font-size:18px;
+    font-weight:bold;
+}
+
+#tipo{
+    font-weight:bold;
+    margin-top:5px;
+}
+
+#estado{
+    margin-top:10px;
+    font-weight:bold;
+}
+
+#timer{
+    color:red;
+    font-weight:bold;
+}
 </style>
 
 </head>
@@ -48,17 +77,20 @@ body{
 
 <h3>Universidad Autónoma del Caribe</h3>
 
-
+<!-- ✅ LOGIN -->
 <div id="loginBox">
 <input id="cedulaInput" placeholder="Cédula"><br><br>
 <button onclick="login()">Ingresar</button>
 </div>
 
-
+<!-- ✅ VISTA QR -->
 <div id="qrView" style="display:none">
 
 <h3 id="nombre"></h3>
 <p id="carrera"></p>
+
+<p id="tipo"></p>
+<p id="estado"></p>
 
 <div id="qr"></div>
 
@@ -68,12 +100,12 @@ body{
 
 </div>
 
-
-<audio id="beep" src="sounds/sounds-beep.mp3"></audio>
+<!-- ✅ SONIDO -->
+<audio id="beep" src="sounds/beep.mp3"></audio>
 
 <script>
 
-
+// ✅ Firebase
 firebase.initializeApp({
  databaseURL:"https://torniquete-universidad-default-rtdb.firebaseio.com"
 });
@@ -84,7 +116,7 @@ let usuario;
 let cedula;
 let inicioQR=0;
 
-// LOGIN
+// ✅ LOGIN CON CONTROL DE VISITANTE
 function login(){
 
     cedula = document.getElementById("cedulaInput").value.trim();
@@ -102,24 +134,62 @@ function login(){
             return;
         }
 
-        usuario=s.val();
+        usuario = s.val();
 
-        document.getElementById("loginBox").style.display="none";
-        document.getElementById("qrView").style.display="block";
+        // ✅ VALIDAR VISITANTE (7 HORAS)
+        if(usuario.tipo === "VISITANTE"){
 
-        document.getElementById("nombre").innerText=usuario.nombre;
-        document.getElementById("carrera").innerText=usuario.carrera;
+            let ahora = Date.now();
+            let limite = 7 * 60 * 60 * 1000;
 
-        generarQR();
+            if(!usuario.inicio){
+                db.ref("usuarios/"+cedula).update({
+                    inicio: ahora
+                });
+                usuario.inicio = ahora;
+            }
+
+            if(ahora - usuario.inicio > limite){
+                alert("⛔ Acceso denegado: tiempo expirado (7 horas)");
+                return;
+            }
+        }
+
+        mostrar();
     });
 }
 
-// QR DINÁMICO NUMÉRICO
+// ✅ MOSTRAR INTERFAZ
+function mostrar(){
+
+    document.getElementById("loginBox").style.display="none";
+    document.getElementById("qrView").style.display="block";
+
+    document.getElementById("nombre").innerText = usuario.nombre || "";
+    document.getElementById("carrera").innerText = usuario.carrera || "";
+
+    // ✅ TIPO
+    document.getElementById("tipo").innerText =
+        "👤 " + (usuario.tipo || "USUARIO");
+
+    // ✅ ESTADO
+    if(usuario.tipo === "VISITANTE"){
+        document.getElementById("estado").innerHTML =
+            "<span style='color:orange'>⏳ Visitante activo</span>";
+    }else{
+        document.getElementById("estado").innerHTML =
+            "<span style='color:green'>✅ Acceso permanente</span>";
+    }
+
+    generarQR();
+}
+
+// ✅ GENERAR QR
 function generarQR(){
 
     inicioQR = Date.now();
 
-    // ✅ SOLO NÚMEROS
+
     const data = cedula + inicioQR;
 
     document.getElementById("qr").innerHTML="";
@@ -134,11 +204,12 @@ function generarQR(){
     document.getElementById("beep").play();
 }
 
-// CONTADOR
+// ✅ CONTADOR + TIEMPO VISITANTE
 setInterval(()=>{
 
     if(!usuario) return;
 
+    // ✅ contador QR
     let restante = 30000 - (Date.now() - inicioQR);
 
     if(restante <= 0){
@@ -148,6 +219,25 @@ setInterval(()=>{
 
     document.getElementById("timer").innerText =
     "⏳ Nuevo QR en: " + Math.floor(restante/1000) + "s";
+
+    // ✅ VISITANTE TIEMPO RESTANTE
+    if(usuario.tipo === "VISITANTE" && usuario.inicio){
+
+        let total = 7 * 60 * 60 * 1000;
+        let restanteVisita = total - (Date.now() - usuario.inicio);
+
+        if(restanteVisita <= 0){
+            document.getElementById("estado").innerHTML =
+                "<span style='color:red'>⛔ Expirado</span>";
+            return;
+        }
+
+        let horas = Math.floor(restanteVisita / (1000*60*60));
+        let minutos = Math.floor((restanteVisita % (1000*60*60))/(1000*60));
+
+        document.getElementById("estado").innerHTML =
+            `⏳ Visitante: ${horas}h ${minutos}m restantes`;
+    }
 
 },1000);
 
