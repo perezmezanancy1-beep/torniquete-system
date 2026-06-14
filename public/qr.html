@@ -40,8 +40,16 @@ body{
 }
 
 #qr{
-    margin:20px auto;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    width:100%;
+    margin:20px 0;
+}
 
+#qr canvas{
+    margin:auto !important;
+    display:block;
 }
 
 #nombre{
@@ -71,18 +79,18 @@ body{
 
 <div class="card">
 
-<!-- ✅ LOGO (IMPORTANTE) -->
+<!-- ✅ LOGO -->
 <img src="img/logo1.png" class="logo">
 
 <h3>Universidad Autónoma del Caribe</h3>
 
-<!-- ✅ LOGIN -->
+<!-- LOGIN -->
 <div id="loginBox">
 <input id="cedulaInput" placeholder="Cédula"><br><br>
 <button onclick="login()">Ingresar</button>
 </div>
 
-<!-- ✅ QR -->
+<!-- QR VIEW -->
 <div id="qrView" style="display:none">
 
 <h3 id="nombre"></h3>
@@ -99,9 +107,9 @@ body{
 
 </div>
 
-<!-- ✅ AUDIO CORRECTO -->
-<audio id="beep">
-    <source src="sounds/beep.mp3" type="audio/mpeg">
+<!-- ✅ AUDIO (CORRECTO) -->
+<audio id="beep" preload="auto">
+  <source src="sounds/beep.mp3" type="audio/mpeg">
 </audio>
 
 <script>
@@ -118,7 +126,7 @@ let usuario;
 let cedula;
 let inicioQR = 0;
 
-// ✅ LOGIN CON CONTROL VISITANTE
+// LOGIN
 function login(){
 
     cedula = document.getElementById("cedulaInput").value.trim();
@@ -138,10 +146,14 @@ function login(){
 
         usuario = s.val();
 
-        // 🔓 desbloquear audio en navegador
-        document.getElementById("beep").play().catch(()=>{});
+        // ✅ desbloquear audio (clave)
+        const audio = document.getElementById("beep");
+        audio.play().then(()=>{
+            audio.pause();
+            audio.currentTime = 0;
+        }).catch(()=>{});
 
-        // ✅ VISITANTE 7 HORAS
+        // VISITANTE 7 HORAS
         if(usuario.tipo === "VISITANTE"){
 
             let ahora = Date.now();
@@ -155,7 +167,7 @@ function login(){
             }
 
             if(ahora - usuario.inicio > limite){
-                alert("⛔ Acceso denegado (visitante expirado)");
+                alert("⛔ Visitante expirado (7h)");
                 return;
             }
         }
@@ -164,7 +176,7 @@ function login(){
     });
 }
 
-// ✅ MOSTRAR
+// MOSTRAR
 function mostrar(){
 
     document.getElementById("loginBox").style.display="none";
@@ -180,20 +192,20 @@ function mostrar(){
 
     if(usuario.tipo === "VISITANTE"){
         document.getElementById("estado").innerHTML =
-            "<span style='color:orange'>⏳ Visitante activo</span>";
+        "<span style='color:orange'>⏳ Visitante activo</span>";
     } else {
         document.getElementById("estado").innerHTML =
-            "<span style='color:green'>✅ Acceso permanente</span>";
+        "<span style='color:green'>✅ Acceso permanente</span>";
     }
 
     generarQR();
 }
 
-// ✅ QR DINÁMICO (SOLO NÚMEROS)
+// GENERAR QR
 function generarQR(){
 
     inicioQR = Date.now();
-    
+
 
     const data = cedula + inicioQR;
 
@@ -205,17 +217,19 @@ function generarQR(){
         height:200
     });
 
+    // 🔊 sonido garantizado
     const audio = document.getElementById("beep");
+    audio.pause();
     audio.currentTime = 0;
     audio.play().catch(()=>{});
 }
 
-// ✅ CONTADOR + TIEMPO VISITANTE
+// CONTADOR + VISITANTE
 setInterval(()=>{
 
     if(!usuario) return;
 
-    // QR TIMER
+
     let restante = 30000 - (Date.now() - inicioQR);
 
     if(restante <= 0){
@@ -224,9 +238,9 @@ setInterval(()=>{
     }
 
     document.getElementById("timer").innerText =
-        "⏳ Nuevo QR en: " + Math.floor(restante/1000) + "s";
+    "⏳ Nuevo QR en: " + Math.floor(restante/1000) + "s";
 
-    // VISITANTE TIMER
+
     if(usuario.tipo === "VISITANTE" && usuario.inicio){
 
         let total = 7 * 60 * 60 * 1000;
@@ -234,7 +248,7 @@ setInterval(()=>{
 
         if(restanteVisita <= 0){
             document.getElementById("estado").innerHTML =
-                "<span style='color:red'>⛔ Expirado</span>";
+            "<span style='color:red'>⛔ Expirado</span>";
             return;
         }
 
@@ -242,7 +256,7 @@ setInterval(()=>{
         let minutos = Math.floor((restanteVisita % (1000*60*60))/(1000*60));
 
         document.getElementById("estado").innerHTML =
-            `⏳ Visitante: ${horas}h ${minutos}m restantes`;
+        `⏳ Visitante: ${horas}h ${minutos}m restantes`;
     }
 
 },1000);
