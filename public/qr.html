@@ -3,25 +3,25 @@
 <head>
 <meta charset="UTF-8">
 
-
-<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
 
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
 <style>
-body{
+body {
     margin:0;
 
     display:flex;
     justify-content:center;
     align-items:center;
     height:100vh;
-    background:linear-gradient(135deg,#2c3e50,#d90429);
-    font-family:Arial;
+    background: linear-gradient(135deg,#2c3e50,#d90429);
+    font-family: Arial;
 }
-.card{
+
+.card {
     background:white;
     padding:25px;
     border-radius:20px;
@@ -29,13 +29,18 @@ body{
     text-align:center;
 
 }
-.logo{
+
+.logo {
     width:80px;
 
     margin-bottom:10px;
 }
-#qr{margin:15px;}
-#timer{
+
+#qr {
+    margin:15px 0;
+}
+
+#timer {
     color:red;
     font-weight:bold;
 }
@@ -47,8 +52,7 @@ body{
 
 <div class="card">
 
-
-<img src="img/logo1.png" class="logo">
+img/logo1.png
 
 <h3>Universidad Autónoma del Caribe</h3>
 
@@ -72,7 +76,7 @@ body{
 
 </div>
 
-<audio id="beep" src="sounds/sounds-beep.mp3"></audio>
+sounds/sounds-beep.mp3</audio>
 
 <script>
 
@@ -83,9 +87,9 @@ firebase.initializeApp({
 
 const db = firebase.database();
 
-let usuario, cedula, inicioQR=0;
-
-
+let usuario;
+let cedula;
+let inicioQR = 0;
 
 function login(){
 
@@ -93,14 +97,19 @@ function login(){
 
     db.ref("usuarios/"+cedula).once("value")
     .then(s=>{
-        if(!s.exists()){ alert("Usuario no encontrado"); return;}
-        usuario=s.val();
+
+        if(!s.exists()){
+            alert("Usuario no encontrado");
+            return;
+        }
+
+        usuario = s.val();
 
         document.getElementById("loginBox").style.display="none";
         document.getElementById("qrView").style.display="block";
 
-        document.getElementById("nombre").innerText=usuario.nombre;
-        document.getElementById("carrera").innerText=usuario.carrera;
+        document.getElementById("nombre").innerText = usuario.nombre;
+        document.getElementById("carrera").innerText = usuario.carrera;
 
         generarQR();
     });
@@ -109,14 +118,12 @@ function login(){
 
 function generarQR(){
 
-    inicioQR=Date.now();
+    inicioQR = Date.now();
 
-    const data = JSON.stringify({
-        cedula: cedula,
-        exp: inicioQR
-    });
+    const data = cedula + "|" + inicioQR;
 
     document.getElementById("qr").innerHTML="";
+
     new QRCode(document.getElementById("qr"),{
         text:data,
         width:200,
@@ -127,21 +134,20 @@ function generarQR(){
     document.getElementById("beep").play();
 }
 
-
+// contador 30s
 setInterval(()=>{
 
     if(!usuario) return;
 
-    let restante = 30000-(Date.now()-inicioQR);
+    let restante = 30000 - (Date.now() - inicioQR);
 
-    if(restante<=0){
+    if(restante <= 0){
         generarQR();
-        restante=30000;
+        restante = 30000;
     }
-    
 
-    document.getElementById("timer").innerText=
-    "⏳ Nuevo QR en: "+Math.floor(restante/1000)+"s";
+    document.getElementById("timer").innerText =
+        "⏳ Nuevo QR en: " + Math.floor(restante/1000) + "s";
 
 },1000);
 
