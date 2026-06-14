@@ -4,7 +4,8 @@
 <meta charset="UTF-8">
 
 <!-- ✅ Firebase -->
-<script src="https://www.gstatic.com/firebasejs/8.10.0/firebasetic.com/firebasejs/8.10.0/firebase-database.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
 
 <!-- ✅ QR -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -30,6 +31,7 @@ body{
 }
 .logo{
     width:80px;
+    margin-bottom:10px;
 }
 #qr{margin:15px;}
 #timer{color:red;font-weight:bold;}
@@ -41,17 +43,18 @@ body{
 
 <div class="card">
 
+<!-- ✅ LOGO CORRECTO -->
 <img src="img/logo1.png" class="logo">
 
 <h3>Universidad Autónoma del Caribe</h3>
 
-
+<!-- LOGIN -->
 <div id="loginBox">
 <input id="cedulaInput" placeholder="Cédula"><br><br>
 <button onclick="login()">Ingresar</button>
 </div>
 
-
+<!-- QR -->
 <div id="qrView" style="display:none">
 
 <h3 id="nombre"></h3>
@@ -65,28 +68,37 @@ body{
 
 </div>
 
-<!-- ✅ SONIDO -->
+<!-- ✅ AUDIO -->
 <audio id="beep" src="sounds/sounds-beep.mp3"></audio>
 
 <script>
 
-
+// ✅ Firebase
 firebase.initializeApp({
  databaseURL:"https://torniquete-universidad-default-rtdb.firebaseio.com"
 });
 
 const db = firebase.database();
 
-let usuario, cedula, inicioQR=0;
+let usuario;
+let cedula;
+let inicioQR=0;
 
+// ✅ LOGIN
 function login(){
-    cedula=document.getElementById("cedulaInput").value.trim();
+
+    cedula = document.getElementById("cedulaInput").value.trim();
+
+    if(!cedula){
+        alert("Ingrese una cédula");
+        return;
+    }
 
     db.ref("usuarios/"+cedula).once("value")
     .then(s=>{
 
         if(!s.exists()){
-            alert("Usuario no encontrado");
+            alert("❌ Usuario no encontrado");
             return;
         }
 
@@ -102,7 +114,7 @@ function login(){
     });
 }
 
-
+// ✅ GENERAR QR
 function generarQR(){
 
     inicioQR = Date.now();
@@ -121,20 +133,20 @@ function generarQR(){
     document.getElementById("beep").play();
 }
 
-
+// ✅ CONTADOR
 setInterval(()=>{
 
     if(!usuario) return;
 
-    let restante = 30000-(Date.now()-inicioQR);
+    let restante = 30000 - (Date.now() - inicioQR);
 
-    if(restante<=0){
+    if(restante <= 0){
         generarQR();
-        restante=30000;
+        restante = 30000;
     }
 
     document.getElementById("timer").innerText =
-        "⏳ Nuevo QR en: "+Math.floor(restante/1000)+"s";
+    "⏳ Nuevo QR en: " + Math.floor(restante/1000) + "s";
 
 },1000);
 
