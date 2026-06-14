@@ -11,17 +11,18 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
 <style>
-body{
+body {
     margin:0;
 
     display:flex;
     justify-content:center;
     align-items:center;
     height:100vh;
-    background:linear-gradient(135deg,#2c3e50,#d90429);
-    font-family:Arial;
+    background: linear-gradient(135deg,#2c3e50,#d90429);
+    font-family: Arial;
 }
-.card{
+
+.card {
     background:white;
     padding:25px;
     border-radius:20px;
@@ -29,13 +30,22 @@ body{
     text-align:center;
 
 }
-.logo{
+
+.logo {
     width:80px;
     display:block;
     margin:auto;
+    margin-bottom:10px;
 }
-#qr{margin:15px;}
-#timer{color:red;font-weight:bold;}
+
+#qr {
+    margin:15px 0;
+}
+
+#timer {
+    color:red;
+    font-weight:bold;
+}
 </style>
 
 </head>
@@ -57,20 +67,18 @@ body{
 
 
 <div id="qrView" style="display:none">
+
 <h3 id="nombre"></h3>
 <p id="carrera"></p>
+
 <div id="qr"></div>
 <p id="timer"></p>
-</div>
 
 </div>
 
+</div>
 
-
-
-
-
-
+<audio id="beep" src="sounds/sounds-beep.mp3"></audio>
 
 <script>
 
@@ -83,7 +91,7 @@ const db = firebase.database();
 
 let usuario;
 let cedula;
-let tiempoInicio = Date.now();
+let inicioQR = 0;
 
 // LOGIN
 function login(){
@@ -110,31 +118,34 @@ function login(){
     });
 }
 
-// GENERAR QR DINÁMICO
+// GENERAR QR
 function generarQR(){
 
-    document.getElementById("qr").innerHTML="";
+    document.getElementById("qr").innerHTML = "";
 
-    tiempoInicio = Date.now();
+    inicioQR = Date.now();
 
     const data = JSON.stringify({
         cedula: cedula,
-        exp: tiempoInicio
+        exp: inicioQR
     });
 
-    new QRCode(document.getElementById("qr"),{
-        text:data,
+    new QRCode(document.getElementById("qr"), {
+        text: data,
         width:200,
         height:200
     });
+
+    // 🔊 SONIDO
+    document.getElementById("beep").play();
 }
 
-// TIMER 30s
+// TIMER
 setInterval(()=>{
 
     if(!usuario) return;
 
-    let restante = 30000 - (Date.now() - tiempoInicio);
+    let restante = 30000 - (Date.now() - inicioQR);
 
     if(restante <= 0){
         generarQR();
