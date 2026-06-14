@@ -3,11 +3,11 @@
 <head>
 <meta charset="UTF-8">
 
-<!-- ✅ Firebase -->
+<!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
 
-<!-- ✅ QR -->
+<!-- QR -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
 <style>
@@ -43,18 +43,18 @@ body{
 
 <div class="card">
 
-<!-- ✅ LOGO CORRECTO -->
+
 <img src="img/logo1.png" class="logo">
 
 <h3>Universidad Autónoma del Caribe</h3>
 
-<!-- LOGIN -->
+
 <div id="loginBox">
 <input id="cedulaInput" placeholder="Cédula"><br><br>
 <button onclick="login()">Ingresar</button>
 </div>
 
-<!-- QR -->
+
 <div id="qrView" style="display:none">
 
 <h3 id="nombre"></h3>
@@ -68,12 +68,12 @@ body{
 
 </div>
 
-<!-- ✅ AUDIO -->
+
 <audio id="beep" src="sounds/sounds-beep.mp3"></audio>
 
 <script>
 
-// ✅ Firebase
+
 firebase.initializeApp({
  databaseURL:"https://torniquete-universidad-default-rtdb.firebaseio.com"
 });
@@ -84,13 +84,13 @@ let usuario;
 let cedula;
 let inicioQR=0;
 
-// ✅ LOGIN
+// LOGIN
 function login(){
 
     cedula = document.getElementById("cedulaInput").value.trim();
 
     if(!cedula){
-        alert("Ingrese una cédula");
+        alert("Ingrese cédula");
         return;
     }
 
@@ -114,12 +114,13 @@ function login(){
     });
 }
 
-// ✅ GENERAR QR
+// QR DINÁMICO NUMÉRICO
 function generarQR(){
 
     inicioQR = Date.now();
 
-    const data = cedula + "|" + inicioQR;
+    // ✅ SOLO NÚMEROS
+    const data = cedula + inicioQR;
 
     document.getElementById("qr").innerHTML="";
 
@@ -133,7 +134,7 @@ function generarQR(){
     document.getElementById("beep").play();
 }
 
-// ✅ CONTADOR
+// CONTADOR
 setInterval(()=>{
 
     if(!usuario) return;
