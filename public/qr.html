@@ -49,22 +49,23 @@ body{
 
 #qr canvas{
     margin:auto !important;
-    display:block;
+
 }
 
 #nombre{
-    font-size:18px;
+
     font-weight:bold;
 }
 
 #tipo{
-    font-weight:bold;
     margin-top:5px;
+    font-weight:bold;
+
 }
 
 #estado{
     margin-top:10px;
-    font-weight:bold;
+
 }
 
 #timer{
@@ -79,18 +80,18 @@ body{
 
 <div class="card">
 
-<!-- ✅ LOGO -->
+
 <img src="img/logo1.png" class="logo">
 
 <h3>Universidad Autónoma del Caribe</h3>
 
-<!-- LOGIN -->
+
 <div id="loginBox">
 <input id="cedulaInput" placeholder="Cédula"><br><br>
 <button onclick="login()">Ingresar</button>
 </div>
 
-<!-- QR VIEW -->
+
 <div id="qrView" style="display:none">
 
 <h3 id="nombre"></h3>
@@ -107,7 +108,7 @@ body{
 
 </div>
 
-<!-- ✅ AUDIO (CORRECTO) -->
+<!-- ✅ AUDIO CORRECTO -->
 <audio id="beep" preload="auto">
   <source src="sounds/beep.mp3" type="audio/mpeg">
 </audio>
@@ -125,8 +126,20 @@ const db = firebase.database();
 let usuario;
 let cedula;
 let inicioQR = 0;
+let audioActivo = false;
 
-// LOGIN
+// ✅ FUNCIÓN SONIDO (PRO)
+function reproducirBeep(){
+    const audio = document.getElementById("beep");
+    audio.pause();
+    audio.currentTime = 0;
+
+    audio.play().catch(()=>{
+        console.log("🔇 Navegador bloqueó sonido");
+    });
+}
+
+// ✅ LOGIN
 function login(){
 
     cedula = document.getElementById("cedulaInput").value.trim();
@@ -135,6 +148,14 @@ function login(){
         alert("Ingrese cédula");
         return;
     }
+
+    // ✅ DESBLOQUEAR AUDIO
+    document.body.addEventListener("click", () => {
+        if(!audioActivo){
+            reproducirBeep();
+            audioActivo = true;
+        }
+    }, {once:true});
 
     db.ref("usuarios/"+cedula).once("value")
     .then(s=>{
@@ -146,23 +167,14 @@ function login(){
 
         usuario = s.val();
 
-        // ✅ desbloquear audio (clave)
-        const audio = document.getElementById("beep");
-        audio.play().then(()=>{
-            audio.pause();
-            audio.currentTime = 0;
-        }).catch(()=>{});
-
-        // VISITANTE 7 HORAS
+        // ✅ VALIDACIÓN VISITANTE
         if(usuario.tipo === "VISITANTE"){
 
             let ahora = Date.now();
             let limite = 7 * 60 * 60 * 1000;
 
             if(!usuario.inicio){
-                db.ref("usuarios/"+cedula).update({
-                    inicio: ahora
-                });
+                db.ref("usuarios/"+cedula).update({inicio: ahora});
                 usuario.inicio = ahora;
             }
 
@@ -176,7 +188,7 @@ function login(){
     });
 }
 
-// MOSTRAR
+// ✅ MOSTRAR
 function mostrar(){
 
     document.getElementById("loginBox").style.display="none";
@@ -201,7 +213,7 @@ function mostrar(){
     generarQR();
 }
 
-// GENERAR QR
+// ✅ GENERAR QR
 function generarQR(){
 
     inicioQR = Date.now();
@@ -217,18 +229,17 @@ function generarQR(){
         height:200
     });
 
-    // 🔊 sonido garantizado
-    const audio = document.getElementById("beep");
-    audio.pause();
-    audio.currentTime = 0;
-    audio.play().catch(()=>{});
+    // 🔊 SONIDO
+    if(audioActivo){
+        reproducirBeep();
+    }
 }
 
-// CONTADOR + VISITANTE
+// ✅ TIMER
 setInterval(()=>{
 
     if(!usuario) return;
-
+    
 
     let restante = 30000 - (Date.now() - inicioQR);
 
@@ -238,9 +249,9 @@ setInterval(()=>{
     }
 
     document.getElementById("timer").innerText =
-    "⏳ Nuevo QR en: " + Math.floor(restante/1000) + "s";
+        "⏳ Nuevo QR en: " + Math.floor(restante/1000) + "s";
 
-
+    // ✅ VISITANTE TIEMPO
     if(usuario.tipo === "VISITANTE" && usuario.inicio){
 
         let total = 7 * 60 * 60 * 1000;
