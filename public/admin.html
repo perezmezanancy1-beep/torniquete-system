@@ -72,6 +72,11 @@ td{
 
 <div class="container">
 
+<!-- 🔊 SONIDO -->
+<audio id="okSound">
+  <source src="https://assets.mixkit.co/sfx/preview/mixkit-correct-answer-tone-2870.mp3" type="audio/mpeg">
+</audio>
+
 <!-- FORMULARIO -->
 <div class="card">
 
@@ -143,6 +148,9 @@ databaseURL:"https://torniquete-universidad-default-rtdb.firebaseio.com"
 
 const db = firebase.database();
 
+let editando=false;
+let cedulaEditando=null;
+
 /* SELECT2 */
 $(document).ready(()=>{
  $("#carrera").select2({
@@ -189,18 +197,31 @@ lista=[
 "ESPECIALIZACION EN TRIBUTACION",
 "ESPECIALIZACION EN ALTA GERENCIA",
 "ESPECIALIZACION EN GERENCIA DEL TALENTO HUMANO",
-"ESPECIALIZACION EN GERENCIA DE PRODUCCION",
+"ESPECIALIZACION EN GERENCIA DE PRODUCCION Y OPERACIONES LOGISTICAS",
 "ESPECIALIZACION EN FINANZAS",
 "ESPECIALIZACION EN GERENCIA DE MERCADEO",
-
-
+"ESPECIALIZACION EN GESTION DE LA SEGURIDAD Y SALUD EN EL TRABAJO",
+"ESPECIALIZACION EN GERENCIA DE LA COMUNICACION ESTRATEGICA",
+"ESPECIALIZACION EN ASEGURAMIENTO DE LA INFORMACION FINANCIERA",
+"ESPECIALIZACION EN GERENCIA DE PROYECTOS",
+"ESPECIALIZACION EN INTELIGENCIA ARTIFICIAL",
+"MAESTRIA EN INGENIERIA MECANICA",
+"MAESTRIA EN MERCADEO",
+"MAESTRIA EN SISTEMAS DE GESTION",
+"MAESTRIA EN LOGISTICA INTEGRAL",
 "MAESTRIA EN EDUCACION",
-"MAESTRIA EN FINANZAS"
+"MAESTRIA EN FINANZAS",
+"MAESTRIA EN ADMINISTRACION MBA",
+"MAESTRIA EN GESTION DE LA CALIDAD EN SERVICIOS DE SALUD",
+"MAESTRIA EN GOBERNABILIDAD E INNOVACION DEMOCRATICA Y DERECHOS HUMANOS",
+"MAESTRIA EN GERENCIA TRIBUTARIA"
 ];
 }
 
 else if(n === "DIPLOMADO"){
-lista=["DIPLOMADO EN CONTRATACION ESTATAL"];
+lista=[
+"DIPLOMADO EN CONTRATACION ESTATAL"
+];
 }
 
 else if(n === "TECNICO"){
@@ -222,10 +243,17 @@ data: lista.map(x=>({id:x,text:x}))
 /* REGISTRAR */
 function registrar(){
 
+if(!cedula.value || !nombre.value || !tipo.value){
+alert("⚠️ Complete todos los campos");
+return;
+}
+
+if(!confirm("¿Confirma que los datos son correctos?")) return;
+
 let exp=null;
 
 if(tipo.value==="VISITANTE"){
-exp = Date.now()+7*60*60*1000;
+exp=Date.now()+7*60*60*1000;
 }
 
 const data={
@@ -238,33 +266,63 @@ correo:correo.value,
 expiracion:exp
 };
 
+if(editando){
+db.ref("usuarios/"+cedulaEditando).update(data);
+}else{
 db.ref("usuarios/"+cedula.value).set(data);
+}
 
-// ✅ WHATSAPP
+document.getElementById("okSound").play();
+
+/* WhatsApp */
 if(tipo.value==="VISITANTE"){
 
 const link=`https://torniquete-system.onrender.com/qr.html?cedula=${cedula.value}`;
+const msg=encodeURIComponent(`🎓 Acceso autorizado\n${link}`);
+window.open(`https://wa.me/57${celular.value}?text=${msg}`);
+}
 
-const mensaje=encodeURIComponent(
-`🎓 Universidad Autónoma del Caribe
-
-✅ Acceso autorizado
-
-⏳ Válido por 7 horas
-
-📲 Ingrese aquí:
-${link}`
-);
-
-window.open(`https://wa.me/57${celular.value}?text=${mensaje}`);
+limpiar();
+alert("✅ Guardado correctamente");
 
 }
 
-alert("✅ Registrado");
+/* EDITAR */
+function editar(c){
+db.ref("usuarios/"+c).once("value").then(snap=>{
+let u=snap.val();
+cedula.value=c;
+nombre.value=u.nombre;
+tipo.value=u.tipo;
+nivel.value=u.nivel;
+celular.value=u.celular;
+correo.value=u.correo;
 
+cargarCarreras();
+
+setTimeout(()=>{
+$("#carrera").val(u.carrera).trigger("change");
+},200);
+
+editando=true;
+cedulaEditando=c;
+});
 }
 
-/* MOSTRAR USUARIOS */
+/* LIMPIAR */
+function limpiar(){
+cedula.value="";
+nombre.value="";
+tipo.value="";
+nivel.value="";
+celular.value="";
+correo.value="";
+$("#carrera").val(null).trigger("change");
+editando=false;
+cedulaEditando=null;
+}
+
+/* MOSTRAR */
 let listaUsuarios=[];
 
 db.ref("usuarios").on("value",snap=>{
@@ -285,27 +343,31 @@ datos.forEach(u=>{
 html+=`
 <tr>
 <td>${u.cedula}</td>
-<td>${u.nombre||""}</td>
-<td>${u.tipo||""}</td>
-<td>${u.carrera||""}</td>
-<td><button onclick="eliminar('${u.cedula}')">🗑️</button></td>
+<td>${u.nombre || ""}</td>
+<td>${u.tipo || ""}</td>
+<td>${u.carrera || ""}</td>
+<td>
+<button onclick="editar('${u.cedula}')">✏️</button>
+<button onclick="eliminar('${u.cedula}')">🗑️</button>
+</td>
 </tr>`;
 });
 
 tablaUsuarios.innerHTML=html;
 }
 
+/* ELIMINAR */
 function eliminar(c){
 if(confirm("Eliminar usuario?")){
 db.ref("usuarios/"+c).remove();
 }
 }
 
+/* FILTRAR */
 function filtrar(){
 const t=buscador.value.toLowerCase();
-
-mostrar(listaUsuarios.filter(u=>
-(u.nombre||"").toLowerCase().includes(t) ||
+mostrar(listaUsuarios.filter(u =>
+(u.nombre || "").toLowerCase().includes(t) ||
 u.cedula.includes(t)
 ));
 }
