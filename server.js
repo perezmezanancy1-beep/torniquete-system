@@ -1,14 +1,17 @@
 const express = require("express");
 const admin = require("firebase-admin");
 const path = require("path");
+const twilio = require("twilio");
 
 const app = express();
 app.use(express.json());
 
-// ✅ SERVIR WEB
+
 app.use(express.static("public"));
 
-// ✅ FIREBASE
+/* =========================
+   ✅ FIREBASE
+========================= */
 const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
 
 admin.initializeApp({
@@ -20,26 +23,85 @@ const db = admin.database();
 
 console.log("✅ Firebase conectado");
 
-// ✅ API VALIDAR (MEJORADA 🔥)
-app.post("/validar", async (req, res) => {
+/* =========================
+   ✅ TWILIO CONFIG
+========================= */
+const client = twilio(
+  process.env.TWILIO_SID,
+  process.env.TWILIO_TOKEN
+);
+
+const numeroTwilio = process.env.TWILIO_NUMERO;
+
+/* =========================
+   ✅ FUNCIÓN ENVIAR SMS
+========================= */
+async function enviarSMS(cedula, telefono) {
   try {
 
-    // ✅ AHORA RECIBE TAMBIÉN exp
-    const { cedula, exp } = req.body;
+    const link = `https://torniquete-system.onrender.com/qr.html?cedula=${cedula}`;
 
-    if (!cedula) {
+    await client.messages.create({
+      body: `UAC ACCESO
+
+Bienvenido a la Universidad Autónoma del Caribe
+
+Su acceso es válido por 7 horas
+
+Ingrese aquí:
+${link}`,
+      from: numeroTwilio,
+      to: "+57" + telefono
+    });
+
+    console.log("📱 SMS enviado →", telefono);
+
+  } catch (error) {
+    console.log("❌ Error enviando SMS:", error.message);
+  }
+}
+
+/* =========================
+   ✅ REGISTRAR DESDE PANEL
+========================= */
+app.post("/registrar", async (req, res) => {
+  try {
+
+    const data = req.body;
+
+    if (!data.cedula) {
       return res.json({ ok: false });
     }
 
-    // 🔒 SEGURIDAD: VALIDAR EXPIRACIÓN DEL QR
-    if (exp) {
-      const ahora = Date.now();
+    // ✅ guardar usuario
+    await db.ref("usuarios/" + data.cedula).set(data);
 
-      if (ahora - exp > 30000) {
-        console.log("⛔ QR EXPIRADO:", cedula);
-        return res.json({ ok: false, error: "QR EXPIRADO" });
-      }
+    // ✅ enviar SMS si es visitante
+    if (data.tipo === "VISITANTE" && data.celular) {
+      await enviarSMS(data.cedula, data.celular);
     }
+
+    console.log("✅ Usuario registrado:", data.cedula);
+
+    res.json({ ok: true });
+
+  } catch (error) {
+
+    console.log("❌ Error en registro:", error);
+    res.json({ ok: false });
+
+  }
+});
+
+/* =========================
+   ✅ VALIDAR (Raspberry)
+========================= */
+app.post("/validar", async (req, res) => {
+  try {
+
+    const { cedula } = req.body;
+
+    if (!cedula) return res.json({ ok: false });
 
     const ref = db.ref("usuarios/" + cedula);
     const snap = await ref.once("value");
@@ -50,22 +112,31 @@ app.post("/validar", async (req, res) => {
     }
 
     let user = snap.val();
+
     let tipoAcceso = "";
 
-    // ✅ ENTRADA
+    // ✅ CONTROL VISITANTE (7H)
+    if (user.tipo === "VISITANTE") {
+
+      if (!user.expiracion || Date.now() > user.expiracion) {
+        console.log("⛔ Visitante expirado:", cedula);
+        return res.json({ ok: false });
+      }
+    }
+
+    // ✅ ENTRADA / SALIDA
     if (!user.estado || user.estado === "fuera") {
 
       await ref.update({ estado: "dentro" });
       tipoAcceso = "entrada";
 
     } else {
-
-      // ✅ SALIDA
+      
       await ref.update({ estado: "fuera" });
       tipoAcceso = "salida";
     }
 
-    // ✅ GUARDAR HISTORIAL AUTOMÁTICO 🔥
+    // ✅ HISTORIAL
     await db.ref("historial").push({
       cedula: cedula,
       nombre: user.nombre || "Usuario",
@@ -73,27 +144,33 @@ app.post("/validar", async (req, res) => {
       fecha: new Date().toISOString()
     });
 
-    console.log(`✅ ${cedula} → ${tipoAcceso}`);
+    console.log("✅ Acceso:", cedula, tipoAcceso);
 
-    return res.json({
+    res.json({
       ok: true,
       tipo: tipoAcceso
     });
 
   } catch (error) {
-    console.log("❌ Error:", error);
+
+    console.log("❌ Error validación:", error);
     res.json({ ok: false });
+
   }
 });
 
-// ✅ RUTA PRINCIPAL
+/* =========================
+   ✅ RUTA PRINCIPAL
+========================= */
 app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
+  res.send("✅ Sistema activo");
 });
 
-// ✅ SERVER
+/* =========================
+   ✅ SERVIDOR
+========================= */
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log("🚀 Servidor web activo en puerto", PORT);
+  console.log("🚀 Servidor activo en puerto", PORT);
 });

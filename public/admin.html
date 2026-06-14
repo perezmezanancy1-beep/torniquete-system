@@ -26,7 +26,7 @@ body{
   color:white;
   padding:15px;
   text-align:center;
-  font-weight:bold;
+
 }
 .container{width:90%;margin:auto;}
 .card{
@@ -47,20 +47,7 @@ button{
   color:white;
   border:none;
   border-radius:8px;
-  cursor:pointer;
-}
-table{
-  width:100%;
-  border-collapse:collapse;
-}
-th{
-  background:#1d3b73;
-  color:white;
-  padding:10px;
-}
-td{
-  padding:10px;
-  text-align:center;
+
 }
 </style>
 
@@ -72,27 +59,18 @@ td{
 
 <div class="container">
 
-<!-- FORMULARIO -->
+
 <div class="card">
 
-<input id="cedula" placeholder="Cédula" oninput="this.value=this.value.replace(/[^0-9]/g,'')">
-<input id="nombre" placeholder="Nombre" oninput="this.value=this.value.toUpperCase().replace(/[^A-Z\s]/g,'')">
+<input id="cedula" placeholder="Cédula">
+<input id="nombre" placeholder="Nombre">
 
 <select id="tipo">
 <option value="">Tipo</option>
 <option>ESTUDIANTE</option>
 <option>TRABAJADOR</option>
 <option>VISITANTE</option>
-</select>
 
-<select id="tipoTrabajador" style="display:none">
-<option value="">Tipo trabajador</option>
-<option>DOCENTE</option>
-<option>ADMINISTRATIVO</option>
-<option>SEGURIDAD</option>
-<option>MANTENIMIENTO</option>
-<option>COMERCIANTE</option>
-<option>LIMPIEZA</option>
 </select>
 
 <select id="nivel" onchange="cargarCarreras()">
@@ -105,31 +83,12 @@ td{
 
 <select id="carrera" style="width:300px;"></select>
 
-<input id="celular" placeholder="Celular" oninput="this.value=this.value.replace(/[^0-9]/g,'')">
+<input id="celular" placeholder="Celular">
 <input id="correo" placeholder="Correo">
 
 <button onclick="registrar()">Registrar</button>
 
-</div>
 
-<!-- TABLA -->
-<div class="card">
-
-<input id="buscador" placeholder="🔎 Buscar..." onkeyup="filtrar()">
-
-<table>
-<thead>
-<tr>
-<th>Cédula</th>
-<th>Nombre</th>
-<th>Carrera</th>
-<th>Acción</th>
-</tr>
-</thead>
-
-<tbody id="tablaUsuarios"></tbody>
-
-</table>
 
 </div>
 
@@ -142,21 +101,14 @@ firebase.initializeApp({
 databaseURL:"https://torniquete-universidad-default-rtdb.firebaseio.com"
 });
 
-const db = firebase.database();
-
-// ✅ Mostrar tipo trabajador
-tipo.addEventListener("change",()=>{
-tipoTrabajador.style.display = (tipo.value==="TRABAJADOR")?"inline-block":"none";
-});
-
-// ✅ Activar Select2
+// ✅ Select2
 $(document).ready(()=>{
-$("#carrera").select2({
-placeholder:"Seleccione programa"
-});
+ $("#carrera").select2({
+  placeholder:"Seleccione programa"
+ });
 });
 
-// ✅ CARGAR CARRERAS SIN ERRORES
+// ✅ CARRERAS COMPLETAS (TU LISTA ORIGINAL)
 function cargarCarreras(){
 
 let lista=[];
@@ -232,92 +184,45 @@ lista=[
 
 
 $("#carrera").empty().select2({
-data: lista.map(x=>({id:x,text:x}))
+data: lista.map(x => ({id:x,text:x}))
 });
 
 }
 
-// ✅ REGISTRAR
+// ✅ REGISTRAR + SMS
 function registrar(){
 
 let exp=null;
+
 if(tipo.value==="VISITANTE"){
-exp=Date.now()+8*60*60*1000;
+exp = Date.now() + 7 * 60 * 60 * 1000;
 }
 
 const data={
-nombre:nombre.value,
-tipo:tipo.value,
-tipoTrabajador:tipoTrabajador.value||"",
-nivel:nivel.value,
-carrera:$("#carrera").val(),
-celular:celular.value,
-correo:correo.value,
-expiracion:exp
+cedula: cedula.value,
+nombre: nombre.value,
+tipo: tipo.value,
+nivel: nivel.value,
+carrera: $("#carrera").val(),
+celular: celular.value,
+correo: correo.value,
+expiracion: exp
 };
 
-db.ref("usuarios/"+cedula.value).update(data);
-
-alert("✅ Registrado");
-
-
-}
-
-// ✅ TABLA
-let listaUsuarios=[];
-
-db.ref("usuarios").on("value",snap=>{
-listaUsuarios=[];
-snap.forEach(c=>{
-listaUsuarios.push({cedula:c.key,...c.val()});
-});
-mostrar(listaUsuarios);
+fetch("/registrar",{
+method:"POST",
+headers:{ "Content-Type":"application/json" },
+body:JSON.stringify(data)
+})
+.then(r=>r.json())
+.then(res=>{
+ if(res.ok){
+   alert("✅ Registrado + SMS enviado");
+ }else{
+   alert("❌ Error");
+ }
 });
 
-// ✅ MOSTRAR
-function mostrar(datos){
-let html="";
-datos.forEach(u=>{
-html+=`
-<tr>
-<td>${u.cedula}</td>
-<td>${u.nombre||""}</td>
-<td>${u.carrera||""}</td>
-<td>
-<button onclick="editar('${u.cedula}')">✏️</button>
-<button onclick="eliminar('${u.cedula}')">🗑️</button>
-</td>
-</tr>`;
-});
-tablaUsuarios.innerHTML=html;
-}
-
-// ✅ EDITAR
-function editar(c){
-let n=prompt("Nuevo nombre:");
-let car=prompt("Nueva carrera:");
-if(n){
-db.ref("usuarios/"+c).update({
-nombre:n.toUpperCase(),
-carrera:car||""
-});
-}
-}
-
-// ✅ ELIMINAR
-function eliminar(c){
-if(confirm("Eliminar?")){
-db.ref("usuarios/"+c).remove();
-}
-}
-
-// ✅ BUSCAR
-function filtrar(){
-const t=buscador.value.toLowerCase();
-mostrar(listaUsuarios.filter(u=>
-(u.nombre||"").toLowerCase().includes(t) ||
-u.cedula.includes(t)
-));
 }
 
 </script>

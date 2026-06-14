@@ -12,11 +12,12 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "express": "^5.2.1",
-    "cors": "^2.8.6",
     "body-parser": "^2.2.2",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
     "firebase-admin": "^13.10.0",
     "jsonwebtoken": "^9.0.3",
-    "qrcode": "^1.5.4"
+    "qrcode": "^1.5.4",
+    "twilio": "^6.0.2"
   }
 }
