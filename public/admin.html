@@ -4,14 +4,14 @@
 <meta charset="UTF-8">
 <title>Panel Administrativo</title>
 
-<!-- ✅ Firebase -->
+<!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
 
-<!-- ✅ jQuery -->
+<!-- jQuery -->
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
-<!-- ✅ Select2 -->
+<!-- Select2 -->
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 
@@ -47,7 +47,20 @@ button{
   color:white;
   border:none;
   border-radius:8px;
-
+  cursor:pointer;
+}
+table{
+  width:100%;
+  border-collapse:collapse;
+}
+th{
+  background:#1d3b73;
+  color:white;
+  padding:10px;
+}
+td{
+  padding:10px;
+  text-align:center;
 }
 </style>
 
@@ -59,11 +72,14 @@ button{
 
 <div class="container">
 
-
+<!-- FORMULARIO -->
 <div class="card">
 
-<input id="cedula" placeholder="Cédula">
-<input id="nombre" placeholder="Nombre">
+<input id="cedula" placeholder="Cédula"
+oninput="this.value=this.value.replace(/[^0-9]/g,'')">
+
+<input id="nombre" placeholder="Nombre"
+oninput="this.value=this.value.toUpperCase().replace(/[^A-ZÑÁÉÍÓÚ\s]/g,'')">
 
 <select id="tipo">
 <option value="">Tipo</option>
@@ -83,12 +99,36 @@ button{
 
 <select id="carrera" style="width:300px;"></select>
 
-<input id="celular" placeholder="Celular">
+<input id="celular" placeholder="Celular"
+oninput="this.value=this.value.replace(/[^0-9]/g,'')">
+
 <input id="correo" placeholder="Correo">
 
 <button onclick="registrar()">Registrar</button>
 
+</div>
 
+<!-- TABLA -->
+<div class="card">
+
+<h3>Usuarios Registrados</h3>
+
+<input id="buscador" placeholder="Buscar..." onkeyup="filtrar()">
+
+<table>
+<thead>
+<tr>
+<th>Cédula</th>
+<th>Nombre</th>
+<th>Tipo</th>
+<th>Carrera</th>
+<th>Acción</th>
+</tr>
+</thead>
+
+<tbody id="tablaUsuarios"></tbody>
+
+</table>
 
 </div>
 
@@ -96,19 +136,21 @@ button{
 
 <script>
 
-// ✅ Firebase
+
 firebase.initializeApp({
 databaseURL:"https://torniquete-universidad-default-rtdb.firebaseio.com"
 });
 
-// ✅ Select2
+const db = firebase.database();
+
+/* SELECT2 */
 $(document).ready(()=>{
  $("#carrera").select2({
   placeholder:"Seleccione programa"
  });
 });
 
-// ✅ CARRERAS COMPLETAS (TU LISTA ORIGINAL)
+/* CARRERAS COMPLETAS */
 function cargarCarreras(){
 
 let lista=[];
@@ -147,25 +189,13 @@ lista=[
 "ESPECIALIZACION EN TRIBUTACION",
 "ESPECIALIZACION EN ALTA GERENCIA",
 "ESPECIALIZACION EN GERENCIA DEL TALENTO HUMANO",
-"ESPECIALIZACION EN GERENCIA DE PRODUCCION Y OPERACIONES LOGISTICAS",
+"ESPECIALIZACION EN GERENCIA DE PRODUCCION",
 "ESPECIALIZACION EN FINANZAS",
 "ESPECIALIZACION EN GERENCIA DE MERCADEO",
-"ESPECIALIZACION EN GESTION DE LA SEGURIDAD Y SALUD EN EL TRABAJO",
-"ESPECIALIZACION EN GERENCIA DE LA COMUNICACION ESTRATEGICA",
-"ESPECIALIZACION EN ASEGURAMIENTO DE LA INFORMACION FINANCIERA",
-"ESPECIALIZACION EN GERENCIA DE PROYECTOS",
-"ESPECIALIZACION EN INTELIGENCIA ARTIFICIAL",
 
-"MAESTRIA EN INGENIERIA MECANICA",
-"MAESTRIA EN MERCADEO",
-"MAESTRIA EN SISTEMAS DE GESTION",
-"MAESTRIA EN LOGISTICA INTEGRAL",
+
 "MAESTRIA EN EDUCACION",
-"MAESTRIA EN FINANZAS",
-"MAESTRIA EN ADMINISTRACION MBA",
-"MAESTRIA EN GESTION DE LA CALIDAD EN SERVICIOS DE SALUD",
-"MAESTRIA EN GOBERNABILIDAD E INNOVACION DEMOCRATICA Y DERECHOS HUMANOS",
-"MAESTRIA EN GERENCIA TRIBUTARIA"
+"MAESTRIA EN FINANZAS"
 ];
 }
 
@@ -184,45 +214,100 @@ lista=[
 
 
 $("#carrera").empty().select2({
-data: lista.map(x => ({id:x,text:x}))
+data: lista.map(x=>({id:x,text:x}))
 });
 
 }
 
-// ✅ REGISTRAR + SMS
+/* REGISTRAR */
 function registrar(){
 
 let exp=null;
 
 if(tipo.value==="VISITANTE"){
-exp = Date.now() + 7 * 60 * 60 * 1000;
+exp = Date.now()+7*60*60*1000;
 }
 
 const data={
-cedula: cedula.value,
-nombre: nombre.value,
-tipo: tipo.value,
-nivel: nivel.value,
-carrera: $("#carrera").val(),
-celular: celular.value,
-correo: correo.value,
-expiracion: exp
+nombre:nombre.value,
+tipo:tipo.value,
+nivel:nivel.value,
+carrera:$("#carrera").val(),
+celular:celular.value,
+correo:correo.value,
+expiracion:exp
 };
 
-fetch("/registrar",{
-method:"POST",
-headers:{ "Content-Type":"application/json" },
-body:JSON.stringify(data)
-})
-.then(r=>r.json())
-.then(res=>{
- if(res.ok){
-   alert("✅ Registrado + SMS enviado");
- }else{
-   alert("❌ Error");
- }
+db.ref("usuarios/"+cedula.value).set(data);
+
+// ✅ WHATSAPP
+if(tipo.value==="VISITANTE"){
+
+const link=`https://torniquete-system.onrender.com/qr.html?cedula=${cedula.value}`;
+
+const mensaje=encodeURIComponent(
+`🎓 Universidad Autónoma del Caribe
+
+✅ Acceso autorizado
+
+⏳ Válido por 7 horas
+
+📲 Ingrese aquí:
+${link}`
+);
+
+window.open(`https://wa.me/57${celular.value}?text=${mensaje}`);
+
+}
+
+alert("✅ Registrado");
+
+}
+
+/* MOSTRAR USUARIOS */
+let listaUsuarios=[];
+
+db.ref("usuarios").on("value",snap=>{
+listaUsuarios=[];
+
+snap.forEach(c=>{
+listaUsuarios.push({cedula:c.key,...c.val()});
 });
 
+mostrar(listaUsuarios);
+});
+
+function mostrar(datos){
+
+let html="";
+
+datos.forEach(u=>{
+html+=`
+<tr>
+<td>${u.cedula}</td>
+<td>${u.nombre||""}</td>
+<td>${u.tipo||""}</td>
+<td>${u.carrera||""}</td>
+<td><button onclick="eliminar('${u.cedula}')">🗑️</button></td>
+</tr>`;
+});
+
+tablaUsuarios.innerHTML=html;
+}
+
+function eliminar(c){
+if(confirm("Eliminar usuario?")){
+db.ref("usuarios/"+c).remove();
+}
+}
+
+function filtrar(){
+const t=buscador.value.toLowerCase();
+
+mostrar(listaUsuarios.filter(u=>
+(u.nombre||"").toLowerCase().includes(t) ||
+u.cedula.includes(t)
+));
 }
 
 </script>
