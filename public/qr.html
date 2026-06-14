@@ -3,15 +3,15 @@
 <head>
 <meta charset="UTF-8">
 
-<!-- ✅ Firebase -->
+
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
 
-<!-- ✅ QR -->
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
 <style>
-body {
+body{
     margin:0;
 
     display:flex;
@@ -21,8 +21,7 @@ body {
     background:linear-gradient(135deg,#2c3e50,#d90429);
     font-family:Arial;
 }
-
-.card {
+.card{
     background:white;
     padding:25px;
     border-radius:20px;
@@ -30,39 +29,13 @@ body {
     text-align:center;
 
 }
-
-/* ✅ LOGO */
-.logo {
-
+.logo{
     width:80px;
     display:block;
     margin:auto;
-    margin-bottom:10px;
 }
-
-/* ✅ QR */
-#qr {
-    display:flex;
-    justify-content:center;
-    margin:15px 0;
-}
-
-#estado {
-
-    font-weight:bold;
-    margin-top:10px;
-}
-
-#timer {
-    color:red;
-    margin-top:10px;
-    font-weight:bold;
-}
-
-#hora {
-    font-size:14px;
-    color:#555;
-}
+#qr{margin:15px;}
+#timer{color:red;font-weight:bold;}
 </style>
 
 </head>
@@ -71,35 +44,23 @@ body {
 
 <div class="card">
 
-<!-- ✅ LOGO (ESTA LÍNEA ES CLAVE) -->
+
 <img src="img/logo1.png" class="logo">
 
 <h3>Universidad Autónoma del Caribe</h3>
 
-<!-- LOGIN -->
+
 <div id="loginBox">
-    <input id="cedulaInput" placeholder="Cédula"><br><br>
-    <button onclick="login()">Ingresar</button>
+<input id="cedulaInput" placeholder="Cédula"><br><br>
+<button onclick="login()">Ingresar</button>
 </div>
 
-<!-- QR -->
+
 <div id="qrView" style="display:none">
-
-    <h3 id="nombre"></h3>
-    <p id="carrera"></p>
-    <p id="tipo"></p>
-    <p id="detalle"></p>
-
-    <div id="estado"></div>
-
-    <div id="qr"></div>
-
-    <!-- ✅ HORA -->
-    <p id="hora"></p>
-
-    <!-- ✅ TIEMPO -->
-    <p id="timer"></p>
-
+<h3 id="nombre"></h3>
+<p id="carrera"></p>
+<div id="qr"></div>
+<p id="timer"></p>
 </div>
 
 </div>
@@ -113,122 +74,77 @@ body {
 
 <script>
 
-// ✅ Firebase
+
 firebase.initializeApp({
-databaseURL:"https://torniquete-universidad-default-rtdb.firebaseio.com"
+ databaseURL:"https://torniquete-universidad-default-rtdb.firebaseio.com"
 });
 
 const db = firebase.database();
 
 let usuario;
 let cedula;
-let intervaloQR;
+let tiempoInicio = Date.now();
 
-// ✅ LOGIN
+// LOGIN
 function login(){
 
     cedula = document.getElementById("cedulaInput").value.trim();
 
-    if(!cedula){
-        alert("Ingrese cédula");
-        return;
-    }
-
-    db.ref("usuarios/" + cedula).once("value")
-    .then(s => {
+    db.ref("usuarios/"+cedula).once("value")
+    .then(s=>{
 
         if(!s.exists()){
-            alert("❌ Usuario no encontrado");
+            alert("Usuario no encontrado");
             return;
         }
 
         usuario = s.val();
 
+        document.getElementById("loginBox").style.display="none";
+        document.getElementById("qrView").style.display="block";
 
-        if(usuario.tipo === "VISITANTE" && Date.now() > usuario.expiracion){
-            document.getElementById("loginBox").innerHTML =
-            "<h2 style='color:red'>⛔ QR EXPIRADO</h2>";
-            return;
-        }
+        document.getElementById("nombre").innerText = usuario.nombre;
+        document.getElementById("carrera").innerText = usuario.carrera;
 
-        mostrar();
-
+        generarQR();
     });
 }
 
-// ✅ MOSTRAR
-function mostrar(){
-
-    document.getElementById("loginBox").style.display="none";
-    document.getElementById("qrView").style.display="block";
-
-    document.getElementById("nombre").innerText = usuario.nombre || "";
-    document.getElementById("carrera").innerText = usuario.carrera || "";
-    document.getElementById("tipo").innerText = "👤 " + usuario.tipo;
-
-    if(usuario.tipo === "TRABAJADOR"){
-        document.getElementById("detalle").innerText =
-        "🏷 " + (usuario.tipoTrabajador || "");
-    }
-
-    document.getElementById("estado").innerHTML =
-    "<span style='color:green'>✅ ACCESO PERMITIDO</span>";
-
-    generarQR();
-    
-    intervaloQR = setInterval(generarQR, 30000);
-}
-
-// ✅ QR DINÁMICO
+// GENERAR QR DINÁMICO
 function generarQR(){
 
-    document.getElementById("qr").innerHTML = "";
+    document.getElementById("qr").innerHTML="";
 
-    new QRCode(document.getElementById("qr"), {
-        text: cedula + "-" + Date.now(),
+    tiempoInicio = Date.now();
+
+    const data = JSON.stringify({
+        cedula: cedula,
+        exp: tiempoInicio
+    });
+
+    new QRCode(document.getElementById("qr"),{
+        text:data,
         width:200,
         height:200
     });
 }
 
-// ✅ HORA + TIEMPO RESTANTE
+// TIMER 30s
 setInterval(()=>{
 
     if(!usuario) return;
 
-    // ✅ HORA ACTUAL
-    let ahora = new Date();
-    let h = ahora.getHours().toString().padStart(2,"0");
-    let m = ahora.getMinutes().toString().padStart(2,"0");
-    let s = ahora.getSeconds().toString().padStart(2,"0");
+    let restante = 30000 - (Date.now() - tiempoInicio);
 
-    document.getElementById("hora").innerText =
-        `🕒 ${h}:${m}:${s}`;
-
-    // ✅ VISITANTE → TIEMPO COMPLETO
-    if(usuario.tipo === "VISITANTE"){
-
-        let restante = usuario.expiracion - Date.now();
-
-        if(restante <= 0){
-            document.getElementById("timer").innerText = "⛔ Expirado";
-            return;
-        }
-
-        let horas = Math.floor(restante / (1000 * 60 * 60));
-        let minutos = Math.floor((restante % (1000 * 60 * 60)) / (1000 * 60));
-        let segundos = Math.floor((restante % (1000 * 60)) / 1000);
-
-        document.getElementById("timer").innerText =
-            `⏳ ${horas.toString().padStart(2,'0')}h `
-          + `${minutos.toString().padStart(2,'0')}m `
-          + `${segundos.toString().padStart(2,'0')}s`;
-
-    } else {
-
-        document.getElementById("timer").innerText =
-        "✅ Acceso permanente";
+    if(restante <= 0){
+        generarQR();
+        restante = 30000;
     }
+
+    let seg = Math.floor(restante / 1000);
+
+    document.getElementById("timer").innerText =
+        "⏳ Nuevo QR en: " + seg + "s";
 
 },1000);
 

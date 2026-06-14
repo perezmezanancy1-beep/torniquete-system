@@ -5,10 +5,10 @@ const path = require("path");
 const app = express();
 app.use(express.json());
 
-// ✅ SERVIR TODAS LAS PÁGINAS WEB
+// ✅ SERVIR WEB
 app.use(express.static("public"));
 
-// ✅ FIREBASE (DESDE RENDER ENV)
+// ✅ FIREBASE
 const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
 
 admin.initializeApp({
@@ -20,46 +20,65 @@ const db = admin.database();
 
 console.log("✅ Firebase conectado");
 
-// ✅ API VALIDAR (RASPBERRY)
+// ✅ API VALIDAR (MEJORADA 🔥)
 app.post("/validar", async (req, res) => {
   try {
 
-    const { cedula } = req.body;
+    // ✅ AHORA RECIBE TAMBIÉN exp
+    const { cedula, exp } = req.body;
 
     if (!cedula) {
       return res.json({ ok: false });
+    }
+
+    // 🔒 SEGURIDAD: VALIDAR EXPIRACIÓN DEL QR
+    if (exp) {
+      const ahora = Date.now();
+
+      if (ahora - exp > 30000) {
+        console.log("⛔ QR EXPIRADO:", cedula);
+        return res.json({ ok: false, error: "QR EXPIRADO" });
+      }
     }
 
     const ref = db.ref("usuarios/" + cedula);
     const snap = await ref.once("value");
 
     if (!snap.exists()) {
+      console.log("❌ Usuario no existe:", cedula);
       return res.json({ ok: false });
     }
 
     let user = snap.val();
+    let tipoAcceso = "";
 
     // ✅ ENTRADA
     if (!user.estado || user.estado === "fuera") {
 
       await ref.update({ estado: "dentro" });
+      tipoAcceso = "entrada";
 
-      return res.json({
-        ok: true,
-        tipo: "entrada"
-      });
-    }
+    } else {
 
-    // ✅ SALIDA
-    if (user.estado === "dentro") {
-
+      // ✅ SALIDA
       await ref.update({ estado: "fuera" });
-
-      return res.json({
-        ok: true,
-        tipo: "salida"
-      });
+      tipoAcceso = "salida";
     }
+
+    // ✅ GUARDAR HISTORIAL AUTOMÁTICO 🔥
+    await db.ref("historial").push({
+      cedula: cedula,
+      nombre: user.nombre || "Usuario",
+      tipo: tipoAcceso,
+      fecha: new Date().toISOString()
+    });
+
+    console.log(`✅ ${cedula} → ${tipoAcceso}`);
+
+    return res.json({
+      ok: true,
+      tipo: tipoAcceso
+    });
 
   } catch (error) {
     console.log("❌ Error:", error);
