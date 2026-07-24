@@ -99,7 +99,7 @@ app.post("/registrar", async (req, res) => {
 app.post("/validar", async (req, res) => {
   try {
 
-    const { cedula } = req.body;
+    const { cedula, qr } = req.body;
 
     if (!cedula) return res.json({ ok: false });
 
@@ -112,6 +112,40 @@ app.post("/validar", async (req, res) => {
     }
 
     let user = snap.val();
+
+// Solo validar QR si realmente viene QR
+if (qr) {
+
+  const tiempoQR = parseInt(
+    qr.substring(cedula.length)
+  );
+
+  if (Date.now() - tiempoQR > 30000) {
+
+    console.log(
+      "⛔ QR expirado:",
+      cedula
+    );
+
+    return res.json({
+      ok: false
+    });
+  }
+
+  if (user.ultimoQR === qr) {
+
+    console.log(
+      "⛔ QR ya utilizado:",
+      cedula
+    );
+
+    return res.json({
+      ok: false
+    });
+  }
+
+}
+
 
     let tipoAcceso = "";
 
@@ -145,6 +179,14 @@ app.post("/validar", async (req, res) => {
     });
 
     console.log("✅ Acceso:", cedula, tipoAcceso);
+
+if (qr) {
+
+  await ref.update({
+    ultimoQR: qr
+  });
+
+}
 
     res.json({
       ok: true,
