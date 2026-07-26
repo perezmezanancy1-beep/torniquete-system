@@ -3,11 +3,11 @@
 <head>
 <meta charset="UTF-8">
 
-<!-- ✅ Firebase -->
+<!--  Firebase -->
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
 
-<!-- ✅ QR -->
+<!--  QR -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
 <style>
@@ -128,7 +128,7 @@ let cedula;
 let inicioQR = 0;
 let audioActivo = false;
 
-// ✅ FUNCIÓN SONIDO (PRO)
+//  FUNCIÓN SONIDO (PRO)
 function reproducirBeep(){
     const audio = document.getElementById("beep");
     audio.pause();
@@ -139,7 +139,7 @@ function reproducirBeep(){
     });
 }
 
-// ✅ LOGIN
+//  LOGIN
 function login(){
 
     cedula = document.getElementById("cedulaInput").value.trim();
@@ -149,7 +149,7 @@ function login(){
         return;
     }
 
-    // ✅ DESBLOQUEAR AUDIO
+    //  DESBLOQUEAR AUDIO
     document.body.addEventListener("click", () => {
         if(!audioActivo){
             reproducirBeep();
@@ -161,13 +161,13 @@ function login(){
     .then(s=>{
 
         if(!s.exists()){
-            alert("❌ Usuario no encontrado");
+            alert(" Usuario no encontrado");
             return;
         }
 
         usuario = s.val();
 
-        // ✅ VALIDACIÓN VISITANTE
+        //  VALIDACIÓN VISITANTE
         if(usuario.tipo === "VISITANTE"){
 
             let ahora = Date.now();
@@ -188,7 +188,7 @@ function login(){
     });
 }
 
-// ✅ MOSTRAR
+//  MOSTRAR
 function mostrar(){
 
     document.getElementById("loginBox").style.display="none";
@@ -207,13 +207,13 @@ function mostrar(){
         "<span style='color:orange'>⏳ Visitante activo</span>";
     } else {
         document.getElementById("estado").innerHTML =
-        "<span style='color:green'>✅ Acceso permanente</span>";
+        "<span style='color:green'> Acceso permanente</span>";
     }
 
     generarQR();
 }
 
-// ✅ GENERAR QR
+//  GENERAR QR
 function generarQR(){
 
     inicioQR = Date.now();
@@ -229,13 +229,13 @@ function generarQR(){
         height:200
     });
 
-    // 🔊 SONIDO
+    //  SONIDO
     if(audioActivo){
         reproducirBeep();
     }
 }
 
-// ✅ TIMER
+// TIMER
 setInterval(()=>{
 
     if(!usuario) return;
@@ -251,7 +251,7 @@ setInterval(()=>{
     document.getElementById("timer").innerText =
         "⏳ Nuevo QR en: " + Math.floor(restante/1000) + "s";
 
-    // ✅ VISITANTE TIEMPO
+    //  VISITANTE TIEMPO
     if(usuario.tipo === "VISITANTE" && usuario.inicio){
 
         let total = 7 * 60 * 60 * 1000;

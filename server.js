@@ -10,7 +10,7 @@ app.use(express.json());
 app.use(express.static("public"));
 
 /* =========================
-   ✅ FIREBASE
+    FIREBASE
 ========================= */
 const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
 
@@ -21,10 +21,10 @@ admin.initializeApp({
 
 const db = admin.database();
 
-console.log("✅ Firebase conectado");
+console.log(" Firebase conectado");
 
 /* =========================
-   ✅ TWILIO CONFIG
+    TWILIO CONFIG
 ========================= */
 const client = twilio(
   process.env.TWILIO_SID,
@@ -34,7 +34,7 @@ const client = twilio(
 const numeroTwilio = process.env.TWILIO_NUMERO;
 
 /* =========================
-   ✅ FUNCIÓN ENVIAR SMS
+    FUNCIÓN ENVIAR SMS
 ========================= */
 async function enviarSMS(cedula, telefono) {
   try {
@@ -57,12 +57,12 @@ ${link}`,
     console.log("📱 SMS enviado →", telefono);
 
   } catch (error) {
-    console.log("❌ Error enviando SMS:", error.message);
+    console.log(" Error enviando SMS:", error.message);
   }
 }
 
 /* =========================
-   ✅ REGISTRAR DESDE PANEL
+    REGISTRAR DESDE PANEL
 ========================= */
 app.post("/registrar", async (req, res) => {
   try {
@@ -73,28 +73,28 @@ app.post("/registrar", async (req, res) => {
       return res.json({ ok: false });
     }
 
-    // ✅ guardar usuario
+    //  guardar usuario
     await db.ref("usuarios/" + data.cedula).set(data);
 
-    // ✅ enviar SMS si es visitante
+    //  enviar SMS si es visitante
     if (data.tipo === "VISITANTE" && data.celular) {
       await enviarSMS(data.cedula, data.celular);
     }
 
-    console.log("✅ Usuario registrado:", data.cedula);
+    console.log(" Usuario registrado:", data.cedula);
 
     res.json({ ok: true });
 
   } catch (error) {
 
-    console.log("❌ Error en registro:", error);
+    console.log(" Error en registro:", error);
     res.json({ ok: false });
 
   }
 });
 
 /* =========================
-   ✅ VALIDAR (Raspberry)
+    VALIDAR (Raspberry)
 ========================= */
 app.post("/validar", async (req, res) => {
   try {
@@ -107,7 +107,7 @@ app.post("/validar", async (req, res) => {
     const snap = await ref.once("value");
 
     if (!snap.exists()) {
-      console.log("❌ Usuario no existe:", cedula);
+      console.log(" Usuario no existe:", cedula);
       return res.json({ ok: false });
     }
 
@@ -149,7 +149,7 @@ if (qr) {
 
     let tipoAcceso = "";
 
-    // ✅ CONTROL VISITANTE (7H)
+    //  CONTROL VISITANTE (7H)
     if (user.tipo === "VISITANTE") {
 
       if (!user.expiracion || Date.now() > user.expiracion) {
@@ -158,7 +158,7 @@ if (qr) {
       }
     }
 
-    // ✅ ENTRADA / SALIDA
+    //  ENTRADA / SALIDA
     if (!user.estado || user.estado === "fuera") {
 
       await ref.update({ estado: "dentro" });
@@ -170,7 +170,7 @@ if (qr) {
       tipoAcceso = "salida";
     }
 
-    // ✅ HISTORIAL
+    //  HISTORIAL
     await db.ref("historial").push({
       cedula: cedula,
       nombre: user.nombre || "Usuario",
@@ -178,7 +178,7 @@ if (qr) {
       fecha: new Date().toISOString()
     });
 
-    console.log("✅ Acceso:", cedula, tipoAcceso);
+    console.log(" Acceso:", cedula, tipoAcceso);
 
 if (qr) {
 
@@ -195,24 +195,24 @@ if (qr) {
 
   } catch (error) {
 
-    console.log("❌ Error validación:", error);
+    console.log(" Error validación:", error);
     res.json({ ok: false });
 
   }
 });
 
 /* =========================
-   ✅ RUTA PRINCIPAL
+    RUTA PRINCIPAL
 ========================= */
 app.get("/", (req, res) => {
-  res.send("✅ Sistema activo");
+  res.send(" Sistema activo");
 });
 
 /* =========================
-   ✅ SERVIDOR
+    SERVIDOR
 ========================= */
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log("🚀 Servidor activo en puerto", PORT);
+  console.log(" Servidor activo en puerto", PORT);
 });
