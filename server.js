@@ -150,13 +150,31 @@ if (qr) {
     let tipoAcceso = "";
 
     //  CONTROL VISITANTE (7H)
-    if (user.tipo === "VISITANTE") {
+if (user.tipo === "VISITANTE") {
 
-      if (!user.expiracion || Date.now() > user.expiracion) {
-        console.log("⛔ Visitante expirado:", cedula);
-        return res.json({ ok: false });
-      }
-    }
+  const limite = 7 * 60 * 60 * 1000;
+
+  if (!user.inicio) {
+
+    await ref.update({
+      inicio: Date.now()
+    });
+
+    user.inicio = Date.now();
+  }
+
+  if (Date.now() - user.inicio > limite) {
+
+    console.log(
+      "⛔ Visitante expirado:",
+      cedula
+    );
+
+    return res.json({
+      ok: false
+    });
+  }
+}
 
     //  ENTRADA / SALIDA
     if (!user.estado || user.estado === "fuera") {
