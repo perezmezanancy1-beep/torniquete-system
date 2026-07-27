@@ -114,22 +114,43 @@ app.post("/validar", async (req, res) => {
     let user = snap.val();
 
 // Solo validar QR si realmente viene QR
+
+// ✅ VALIDACIÓN QR
 if (qr) {
+
+  console.log("================================");
+  console.log("CEDULA:", cedula);
+  console.log("QR:", qr);
+  console.log("ULTIMO QR:", user.ultimoQR);
 
   const partesQR = qr.split("|");
 
-const tiempoQR = parseInt(
-  partesQR[1]
-);
+  console.log("PARTES QR:", partesQR);
 
- // const tiempoQR = parseInt(
- //   qr.substring(cedula.length)
-  //);
+  if (partesQR.length < 2) {
 
-  if (Date.now() - tiempoQR > 30000) {
+    console.log("⛔ FORMATO QR INVÁLIDO");
+
+    return res.json({
+      ok: false
+    });
+  }
+
+  const tiempoQR = parseInt(
+    partesQR[1]
+  );
+
+  console.log("TIEMPO QR:", tiempoQR);
+  console.log("AHORA:", Date.now());
+
+  const diferencia = Date.now() - tiempoQR;
+
+  console.log("DIFERENCIA:", diferencia);
+
+  if (diferencia > 30000) {
 
     console.log(
-      "⛔ QR expirado:",
+      "⛔ QR EXPIRADO:",
       cedula
     );
 
@@ -141,7 +162,7 @@ const tiempoQR = parseInt(
   if (user.ultimoQR === qr) {
 
     console.log(
-      "⛔ QR ya utilizado:",
+      "⛔ QR YA UTILIZADO:",
       cedula
     );
 
@@ -153,7 +174,8 @@ const tiempoQR = parseInt(
 }
 
 
-    let tipoAcceso = "";
+let tipoAcceso = "";
+
 
     //  CONTROL VISITANTE (7H)
 if (user.tipo === "VISITANTE") {
