@@ -115,7 +115,7 @@ app.post("/validar", async (req, res) => {
 
 // Solo validar QR si realmente viene QR
 
-// ✅ VALIDACIÓN QR
+// VALIDACIÓN QR
 if (qr) {
 
   console.log("================================");
@@ -123,7 +123,9 @@ if (qr) {
   console.log("QR:", qr);
   console.log("ULTIMO QR:", user.ultimoQR);
 
-  const partesQR = qr.split("|");
+  const tiempoQR = parseInt(
+    qr.substring(10)
+);
 
   console.log("PARTES QR:", partesQR);
 
