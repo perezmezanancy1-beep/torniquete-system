@@ -108,7 +108,7 @@ body{
 
 </div>
 
-<!-- ✅ AUDIO CORRECTO -->
+<!--  AUDIO CORRECTO -->
 <audio id="beep" preload="auto">
   <source src="sounds/beep.mp3" type="audio/mpeg">
 </audio>
@@ -219,8 +219,11 @@ function generarQR(){
     inicioQR = Date.now();
 
 
-    const data = cedula + inicioQR;
+    
+    //const data = cedula + inicioQR;
 
+    const data = cedula + "|" + inicioQR;
+    
     document.getElementById("qr").innerHTML="";
 
     new QRCode(document.getElementById("qr"),{
