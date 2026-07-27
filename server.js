@@ -116,9 +116,15 @@ app.post("/validar", async (req, res) => {
 // Solo validar QR si realmente viene QR
 if (qr) {
 
-  const tiempoQR = parseInt(
-    qr.substring(cedula.length)
-  );
+  const partesQR = qr.split("|");
+
+const tiempoQR = parseInt(
+  partesQR[1]
+);
+
+ // const tiempoQR = parseInt(
+ //   qr.substring(cedula.length)
+  //);
 
   if (Date.now() - tiempoQR > 30000) {
 
