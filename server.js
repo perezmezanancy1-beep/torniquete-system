@@ -115,7 +115,7 @@ app.post("/validar", async (req, res) => {
 
 // Solo validar QR si realmente viene QR
 
-// VALIDACIÓN QR
+// ✅ VALIDACIÓN QR
 if (qr) {
 
   console.log("================================");
@@ -123,23 +123,9 @@ if (qr) {
   console.log("QR:", qr);
   console.log("ULTIMO QR:", user.ultimoQR);
 
+  // QR = 10 dígitos de cédula + timestamp
   const tiempoQR = parseInt(
     qr.substring(10)
-);
-
-  console.log("PARTES QR:", partesQR);
-
-  if (partesQR.length < 2) {
-
-    console.log("⛔ FORMATO QR INVÁLIDO");
-
-    return res.json({
-      ok: false
-    });
-  }
-
-  const tiempoQR = parseInt(
-    partesQR[1]
   );
 
   console.log("TIEMPO QR:", tiempoQR);
@@ -175,11 +161,9 @@ if (qr) {
 
 }
 
-
 let tipoAcceso = "";
 
-
-    //  CONTROL VISITANTE (7H)
+// ✅ CONTROL VISITANTE (7H)
 if (user.tipo === "VISITANTE") {
 
   const limite = 7 * 60 * 60 * 1000;
@@ -196,7 +180,7 @@ if (user.tipo === "VISITANTE") {
   if (Date.now() - user.inicio > limite) {
 
     console.log(
-      "⛔ Visitante expirado:",
+      "⛔ VISITANTE EXPIRADO:",
       cedula
     );
 
@@ -204,6 +188,7 @@ if (user.tipo === "VISITANTE") {
       ok: false
     });
   }
+
 }
 
     //  ENTRADA / SALIDA
