@@ -222,7 +222,9 @@ function generarQR(){
     
     //const data = cedula + inicioQR;
 
-    const data = cedula + "X" + inicioQR;
+    const cedulaQR = cedula.padStart(10, "0");
+
+const data = cedulaQR + "|" + inicioQR;
     
     document.getElementById("qr").innerHTML="";
 
