@@ -59,8 +59,8 @@ FINGERPRINT_SECURITY_LEVEL = 1
 FINGERPRINT_MATCH_MIN_SCORE = 30
 FINGERPRINT_STABLE_PRESENT_READS = 2
 FINGERPRINT_STABLE_ABSENT_READS = 2
-FINGERPRINT_REPOSITION_ATTEMPTS = 2
-FINGERPRINT_HOLD_SECONDS = 0.45
+FINGERPRINT_ENROLL_CAPTURE_ATTEMPTS = 3
+FINGERPRINT_ENROLL_DUPLICATE_MIN_SCORE = 80
 LOG_FULL_QR = os.environ.get("TORNIQUETE_LOG_FULL_QR") == "1"
 
 stop_event = threading.Event()
@@ -935,14 +935,11 @@ def assign_fingerprint_to_person(person_id, direction, position):
         users_cache["expires_at"] = 0
 
 
-def store_merged_fingerprint(sensor, person_id, direction):
-    if not sensor.createTemplate():
-        raise RuntimeError("El sensor no pudo formar la plantilla.")
-
+def store_captured_fingerprint(sensor, person_id, direction):
     existing_position, accuracy = sensor.searchTemplate()
     is_duplicate = (
         existing_position >= 0
-        and accuracy >= FINGERPRINT_MATCH_MIN_SCORE
+        and accuracy >= FINGERPRINT_ENROLL_DUPLICATE_MIN_SCORE
     )
     if is_duplicate:
         owner_id, _owner = find_person_by_fingerprint(
@@ -959,7 +956,10 @@ def store_merged_fingerprint(sensor, person_id, direction):
             )
         position = existing_position
     else:
-        position = sensor.storeTemplate()
+        position = sensor.storeTemplate(
+            positionNumber=-1,
+            charBufferNumber=0x01,
+        )
 
     assign_fingerprint_to_person(
         person_id,
@@ -982,90 +982,61 @@ def enroll_fingerprint(sensor, command, direction):
     if not command_id or not person_id.isdigit():
         return
 
-    first_prompt = (
-        f"Coloque el dedo en el lector de {reader_label} "
-        "y manténgalo quieto."
-    )
-    enqueue_voice("Coloque el dedo y manténgalo quieto")
-
     try:
         position = None
-        capture_fingerprint_sample(
-            sensor,
-            0x01,
-            command_id,
-            first_prompt,
-        )
-
-        update_fingerprint_command(
-            command_id,
-            estado="procesando",
-            mensaje="Mantenga el dedo quieto mientras se confirma la lectura.",
-        )
-        stop_event.wait(FINGERPRINT_HOLD_SECONDS)
-        if wait_for_finger(
-            sensor,
-            True,
-            timeout_seconds=3,
-            stable_reads=1,
-        ):
-            sensor.convertImage(0x02)
-            comparison_score = sensor.compareCharacteristics()
-            print(
-                "HUELLA COMPARACION "
-                f"persona={person_id} modo=automatica "
-                f"puntuacion={comparison_score}",
-                flush=True,
+        for attempt in range(1, FINGERPRINT_ENROLL_CAPTURE_ATTEMPTS + 1):
+            if attempt > 1:
+                request_finger_removal(sensor, command_id)
+            prompt = (
+                f"Coloque el dedo en el lector de {reader_label}, "
+                "centrado y sin moverlo."
             )
-            if comparison_score > 0:
-                position = store_merged_fingerprint(
+            enqueue_voice(
+                "Coloque el dedo y manténgalo quieto"
+                if attempt == 1
+                else "Ajuste el dedo y manténgalo quieto"
+            )
+            try:
+                capture_fingerprint_sample(
                     sensor,
-                    person_id,
-                    direction,
+                    0x01,
+                    command_id,
+                    prompt,
                 )
-
-        for attempt in range(1, FINGERPRINT_REPOSITION_ATTEMPTS + 1):
-            if position is not None:
-                break
-            request_finger_removal(sensor, command_id)
-            second_prompt = (
-                "Vuelva a colocar el mismo dedo, centrado, "
-                "y manténgalo quieto."
-            )
-            enqueue_voice("Coloque el dedo de nuevo y manténgalo quieto")
-            capture_fingerprint_sample(
-                sensor,
-                0x02,
-                command_id,
-                second_prompt,
-            )
-            comparison_score = sensor.compareCharacteristics()
-            print(
-                "HUELLA COMPARACION "
-                f"persona={person_id} modo=recolocada "
-                f"intento={attempt} puntuacion={comparison_score}",
-                flush=True,
-            )
-            if comparison_score > 0:
-                position = store_merged_fingerprint(
-                    sensor,
-                    person_id,
-                    direction,
+            except Exception as capture_error:
+                print(
+                    "HUELLA CAPTURA DESCARTADA "
+                    f"persona={person_id} intento={attempt} "
+                    f"motivo={capture_error}",
+                    flush=True,
                 )
-                break
-
-            if attempt < FINGERPRINT_REPOSITION_ATTEMPTS:
-                # La imagen más reciente pasa a ser la nueva referencia.
-                # Así una primera captura deficiente no bloquea el registro.
-                sensor.convertImage(0x01)
+                if attempt >= FINGERPRINT_ENROLL_CAPTURE_ATTEMPTS:
+                    raise RuntimeError(
+                        "No se obtuvo una imagen clara. Limpie el sensor "
+                        "y coloque el dedo seco, centrado y sin moverlo."
+                    ) from capture_error
                 update_fingerprint_command(
                     command_id,
                     estado="procesando",
                     mensaje=(
-                        "No hubo suficiente coincidencia. Retire y coloque "
-                        "el dedo una vez más."
+                        "La imagen salió movida. Retire el dedo y vuelva "
+                        "a colocarlo centrado."
                     ),
                 )
+                continue
+
+            position = store_captured_fingerprint(
+                sensor,
+                person_id,
+                direction,
+            )
+            print(
+                "HUELLA CAPTURA ACEPTADA "
+                f"persona={person_id} intento={attempt}",
+                flush=True,
+            )
+            if position is not None:
+                break
 
         if position is None:
             raise RuntimeError(

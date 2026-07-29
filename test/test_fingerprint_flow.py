@@ -80,25 +80,13 @@ class FakeSensor:
 
 class FakeEnrollmentSensor:
     def __init__(self):
-        self.comparison_scores = iter([0, 0, 18])
         self.events = []
-
-    def compareCharacteristics(self):
-        self.events.append("compare")
-        return next(self.comparison_scores)
-
-    def convertImage(self, buffer_number):
-        self.events.append(f"convert:{buffer_number}")
-
-    def createTemplate(self):
-        self.events.append("create")
-        return True
 
     def searchTemplate(self):
         self.events.append("search")
         return (-1, 0)
 
-    def storeTemplate(self):
+    def storeTemplate(self, positionNumber=-1, charBufferNumber=0x01):
         self.events.append("store")
         return 6
 
@@ -146,9 +134,10 @@ class FingerprintFlowTests(unittest.TestCase):
 
         self.assertNotEqual(old_path, new_path)
 
-    def test_uses_automatic_frames_and_promotes_the_latest_good_capture(self):
+    def test_discards_messy_images_and_stores_first_clear_capture(self):
         sensor = FakeEnrollmentSensor()
         assigned = []
+        capture_attempts = []
         original_functions = (
             self.module.enqueue_voice,
             self.module.capture_fingerprint_sample,
@@ -159,7 +148,13 @@ class FingerprintFlowTests(unittest.TestCase):
             self.module.wait_for_finger,
         )
         self.module.enqueue_voice = lambda *_args: None
-        self.module.capture_fingerprint_sample = lambda *_args: None
+
+        def capture_with_two_messy_images(*_args):
+            capture_attempts.append(True)
+            if len(capture_attempts) < 3:
+                raise RuntimeError("The image is too messy")
+
+        self.module.capture_fingerprint_sample = capture_with_two_messy_images
         self.module.request_finger_removal = lambda *_args: None
         self.module.update_fingerprint_command = lambda *_args, **_kwargs: True
         self.module.assign_fingerprint_to_person = (
@@ -185,19 +180,8 @@ class FingerprintFlowTests(unittest.TestCase):
                 self.module.wait_for_finger,
             ) = original_functions
 
-        self.assertEqual(
-            sensor.events,
-            [
-                "convert:2",
-                "compare",
-                "compare",
-                "convert:1",
-                "compare",
-                "create",
-                "search",
-                "store",
-            ],
-        )
+        self.assertEqual(len(capture_attempts), 3)
+        self.assertEqual(sensor.events, ["search", "store"])
         self.assertEqual(assigned, [("123", "entrada", 6)])
 
 if __name__ == "__main__":
