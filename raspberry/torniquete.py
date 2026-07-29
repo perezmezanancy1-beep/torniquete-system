@@ -3,12 +3,13 @@
 
 import os
 import fcntl
+import hashlib
 import queue
 import signal
 import subprocess
-import tempfile
 import threading
 import time
+import wave
 
 import evdev
 from pyfingerprint.pyfingerprint import PyFingerprint
@@ -18,6 +19,12 @@ from urllib3.util.retry import Retry
 import RPi.GPIO as GPIO
 
 from qr_input import QrKeyboardBuffer
+
+try:
+    from piper import PiperVoice, SynthesisConfig
+except ImportError:
+    PiperVoice = None
+    SynthesisConfig = None
 
 
 URL_VALIDAR = "https://torniquete-system.onrender.com/validar"
@@ -34,6 +41,8 @@ RELE_SALIDA = 27
 AUDIO_DEVICE = "hw:2,0"
 AUDIO_CARD = "2"
 AUDIO_MIXER_LEVEL = "95%"
+PIPER_MODEL = "/home/pirb/voices/es_MX-ald-medium.onnx"
+VOICE_CACHE_DIR = "/home/pirb/.torniquete_voice_cache"
 REQUEST_TIMEOUT = (4, 35)
 QR_DEDUP_SECONDS = 3
 LOG_FULL_QR = os.environ.get("TORNIQUETE_LOG_FULL_QR") == "1"
@@ -152,42 +161,83 @@ def enqueue_voice(text):
         print("Cola de voz llena; aviso omitido", flush=True)
 
 
+def load_neural_voice():
+    if PiperVoice is None or not os.path.isfile(PIPER_MODEL):
+        print("Voz neuronal no disponible; usando voz de respaldo", flush=True)
+        return None
+    try:
+        voice = PiperVoice.load(PIPER_MODEL, use_cuda=False)
+        print("Voz neuronal en español lista", flush=True)
+        return voice
+    except Exception as error:
+        print(f"No fue posible cargar la voz neuronal: {error}", flush=True)
+        return None
+
+
+def voice_cache_path(text):
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    return os.path.join(VOICE_CACHE_DIR, f"{digest}.wav")
+
+
+def synthesize_voice(text, audio_path, neural_voice):
+    if neural_voice is not None:
+        synthesis_config = SynthesisConfig(
+            volume=1.15,
+            length_scale=0.9,
+            noise_scale=0.667,
+            noise_w_scale=0.8,
+            normalize_audio=True,
+        )
+        with wave.open(audio_path, "wb") as wav_file:
+            neural_voice.synthesize_wav(
+                text,
+                wav_file,
+                syn_config=synthesis_config,
+            )
+        return
+
+    subprocess.run(
+        [
+            "espeak-ng",
+            "-v",
+            "es-419",
+            "-s",
+            "155",
+            "-p",
+            "48",
+            "-a",
+            "180",
+            "-w",
+            audio_path,
+            text,
+        ],
+        check=True,
+        timeout=5,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
+def normalize_spoken_name(name):
+    return " ".join(str(name).lower().title().split())
+
+
 def voice_worker():
+    os.makedirs(VOICE_CACHE_DIR, exist_ok=True)
+    neural_voice = load_neural_voice()
+
     while not stop_event.is_set():
         try:
             text = voice_queue.get(timeout=0.5)
         except queue.Empty:
             continue
 
-        audio_path = None
+        audio_path = voice_cache_path(text)
         try:
-            with tempfile.NamedTemporaryFile(
-                prefix="voz_torniquete_",
-                suffix=".wav",
-                delete=False,
-            ) as temporary:
-                audio_path = temporary.name
-
-            subprocess.run(
-                [
-                    "espeak-ng",
-                    "-v",
-                    "es-419",
-                    "-s",
-                    "155",
-                    "-p",
-                    "48",
-                    "-a",
-                    "180",
-                    "-w",
-                    audio_path,
-                    text,
-                ],
-                check=True,
-                timeout=5,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
+            if not os.path.isfile(audio_path):
+                temporary_path = f"{audio_path}.tmp.wav"
+                synthesize_voice(text, temporary_path, neural_voice)
+                os.replace(temporary_path, audio_path)
             subprocess.run(
                 ["aplay", "-q", "-D", AUDIO_DEVICE, audio_path],
                 check=False,
@@ -196,11 +246,6 @@ def voice_worker():
         except Exception as error:
             print(f"Error de voz: {error}", flush=True)
         finally:
-            if audio_path:
-                try:
-                    os.remove(audio_path)
-                except FileNotFoundError:
-                    pass
             voice_queue.task_done()
 
 
@@ -215,7 +260,7 @@ def process_authorized_access(data):
     person = data.get("persona") or {}
     person_id = person.get("personaId", "")
     name = (person.get("nombre") or f"usuario {person_id}").strip()
-    spoken_name = " ".join(name.lower().title().split())
+    spoken_name = normalize_spoken_name(name)
     movement = data.get("tipo")
 
     if movement == "entrada":
@@ -385,14 +430,15 @@ def update_firebase_state(person_id, state):
 
 def process_fingerprint(person_id, user, direction):
     name = (user.get("nombre") or f"usuario {person_id}").strip()
+    spoken_name = normalize_spoken_name(name)
     if direction == "entrada":
         if update_firebase_state(person_id, "dentro"):
             threading.Thread(target=open_entry, daemon=True).start()
-            enqueue_voice(f"Bienvenido {name}")
+            enqueue_voice(f"Bienvenido, {spoken_name}")
     else:
         if update_firebase_state(person_id, "fuera"):
             threading.Thread(target=open_exit, daemon=True).start()
-            enqueue_voice(f"Nos vemos pronto {name}")
+            enqueue_voice(f"Nos vemos pronto, {spoken_name}")
 
 
 def initialize_fingerprint_sensor(path, name):

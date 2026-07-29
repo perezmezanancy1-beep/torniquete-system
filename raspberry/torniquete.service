@@ -9,7 +9,7 @@ User=pirb
 Group=pirb
 SupplementaryGroups=input dialout gpio audio
 WorkingDirectory=/home/pirb
-ExecStart=/usr/bin/python3 /home/pirb/torniquete.py
+ExecStart=/home/pirb/torniquete-venv/bin/python /home/pirb/torniquete.py
 Restart=always
 RestartSec=3
 Environment=PYTHONUNBUFFERED=1
