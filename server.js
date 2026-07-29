@@ -8,7 +8,11 @@ const QRCode = require("qrcode");
 const twilio = require("twilio");
 
 const { fetchPersonName } = require("./epica");
-const { ROLES, inspectToken, issueToken } = require("./mipase");
+const {
+  ROLES,
+  inspectTokenWithTrailingRecovery,
+  issueToken,
+} = require("./mipase");
 
 const VISITOR_DURATION_MS = 7 * 60 * 60 * 1000;
 
@@ -277,13 +281,16 @@ app.post("/api/qr", async (req, res) => {
 // Recibe exactamente el token leído por el escáner físico de la Raspberry.
 app.post("/validar", async (req, res) => {
   try {
-    const token = typeof req.body?.token === "string"
+    const receivedToken = typeof req.body?.token === "string"
       ? req.body.token.trim()
       : "";
 
     // La búsqueda amplia permite identificar capturas vencidas y devolver el
     // código específico que la Raspberry anuncia por voz.
-    const validation = inspectToken(token, { tolerance: 1440 });
+    const validation = inspectTokenWithTrailingRecovery(
+      receivedToken,
+      { tolerance: 1440 }
+    );
     if (!validation.ok) {
       const expired = validation.reason === "EXPIRED";
       return res.status(401).json({
@@ -293,6 +300,14 @@ app.post("/validar", async (req, res) => {
           ? "El código QR ya expiró."
           : "El código QR es inválido.",
       });
+    }
+
+    const token = validation.token;
+    if (validation.recoveredTrailingCharacter) {
+      console.warn(
+        "QR recuperado: el lector omitió el último carácter " +
+        `(longitud recibida=${receivedToken.length})`
+      );
     }
 
     const info = validation.info;

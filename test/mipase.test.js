@@ -8,6 +8,7 @@ process.env.MIPASE_SECRET = "clave-exclusiva-para-pruebas-automatizadas";
 const {
   MAX_TOKEN_AGE_MS,
   inspectToken,
+  inspectTokenWithTrailingRecovery,
   issueToken,
   validateToken,
 } = require("../mipase");
@@ -70,6 +71,40 @@ test("acepta un token justo antes de cumplir dos minutos", () => {
   });
 
   assert.ok(validateToken(token, { now: NOW }));
+});
+
+test("recupera exactamente el último carácter omitido por el lector HID", () => {
+  const token = issueToken({
+    personaId: 1047037821,
+    codigoRol: 1,
+    now: NOW - 10_000,
+  });
+  const truncated = token.slice(0, -1);
+
+  const result = inspectTokenWithTrailingRecovery(truncated, { now: NOW });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.info.personaId, 1047037821);
+  assert.equal(result.token, token);
+  assert.equal(result.recoveredTrailingCharacter, true);
+});
+
+test("mantiene la expiración aunque el lector omita el último carácter", () => {
+  const token = issueToken({
+    personaId: 1047037821,
+    codigoRol: 1,
+    now: NOW - MAX_TOKEN_AGE_MS - 1,
+  });
+
+  const result = inspectTokenWithTrailingRecovery(token.slice(0, -1), {
+    now: NOW,
+    tolerance: 5,
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, "EXPIRED");
+  assert.equal(result.token, token);
+  assert.equal(result.recoveredTrailingCharacter, true);
 });
 
 test("rechaza un token con más de dos minutos", () => {

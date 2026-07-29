@@ -37,6 +37,7 @@ AUDIO_CARD = "2"
 AUDIO_MIXER_LEVEL = "95%"
 REQUEST_TIMEOUT = (4, 10)
 QR_DEDUP_SECONDS = 3
+LOG_FULL_QR = os.environ.get("TORNIQUETE_LOG_FULL_QR") == "1"
 
 stop_event = threading.Event()
 voice_queue = queue.Queue(maxsize=10)
@@ -300,6 +301,8 @@ def qr_reader_worker():
                     f"QR recibido longitud={len(token)} final={token[-6:]}",
                     flush=True,
                 )
+                if LOG_FULL_QR:
+                    print(f"QR_DIAGNOSTICO={token}", flush=True)
                 try:
                     qr_queue.put_nowait(token)
                 except queue.Full:

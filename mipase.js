@@ -3,6 +3,8 @@
 const PERIOD_MS = 60_000;
 const MAX_TOKEN_AGE_MS = 2 * 60_000;
 const CLOCK_SKEW_MS = 15_000;
+const BASE64_URL_ALPHABET =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
 const ROLES = Object.freeze({
   1: "ESTUDIANTE",
@@ -73,6 +75,9 @@ function fromBase64Url(value) {
       unpadded.replace(/-/g, "+").replace(/_/g, "/") + padding,
       "base64"
     );
+    if (toBase64Url(decoded) !== unpadded) {
+      return null;
+    }
     return decoded.length >= 2 ? decoded : null;
   } catch {
     return null;
@@ -216,12 +221,60 @@ function validateToken(token, options = {}) {
   return result.ok ? result.info : null;
 }
 
+function inspectTokenWithTrailingRecovery(token, options = {}) {
+  const normalized = typeof token === "string" ? token.trim() : "";
+  const directResult = inspectToken(normalized, options);
+  const authenticatedReasons = new Set(["EXPIRED", "FUTURE"]);
+
+  if (
+    directResult.ok ||
+    authenticatedReasons.has(directResult.reason) ||
+    !normalized ||
+    normalized.length > 512 ||
+    !/^[A-Za-z0-9_-]+$/u.test(normalized)
+  ) {
+    return Object.freeze({
+      ...directResult,
+      token: normalized,
+      recoveredTrailingCharacter: false,
+    });
+  }
+
+  const matches = [];
+  for (const character of BASE64_URL_ALPHABET) {
+    const candidateToken = normalized + character;
+    const candidateResult = inspectToken(candidateToken, options);
+    if (
+      candidateResult.ok ||
+      authenticatedReasons.has(candidateResult.reason)
+    ) {
+      matches.push({ candidateToken, candidateResult });
+    }
+  }
+
+  if (matches.length !== 1) {
+    return Object.freeze({
+      ...directResult,
+      token: normalized,
+      recoveredTrailingCharacter: false,
+    });
+  }
+
+  const match = matches[0];
+  return Object.freeze({
+    ...match.candidateResult,
+    token: match.candidateToken,
+    recoveredTrailingCharacter: true,
+  });
+}
+
 module.exports = {
   CLOCK_SKEW_MS,
   MAX_TOKEN_AGE_MS,
   PERIOD_MS,
   ROLES,
   inspectToken,
+  inspectTokenWithTrailingRecovery,
   issueToken,
   validateToken,
 };
