@@ -56,8 +56,9 @@ class QrKeyboardBuffer:
                 self.shift_keys_down.discard(keycode)
             return None
 
-        # Solo se procesa el evento de pulsación, no repetición ni liberación.
-        if keystate != 1:
+        # Algunos lectores HID emiten el segundo carácter consecutivo como
+        # repetición (2). Se aceptan pulsación y repetición, pero no liberación.
+        if keystate not in (1, 2):
             return None
 
         if keycode in ENTER_KEYS:

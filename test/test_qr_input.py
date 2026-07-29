@@ -44,12 +44,12 @@ class QrInputTests(unittest.TestCase):
 
         self.assertEqual(completed, "Ab1-_")
 
-    def test_ignores_release_and_repeat_events(self):
+    def test_accepts_scanner_repeat_as_consecutive_character(self):
         reader = QrKeyboardBuffer()
         reader.feed("KEY_A", 0)
-        reader.feed("KEY_A", 2)
         reader.feed("KEY_A", 1)
-        self.assertEqual(reader.feed("KEY_ENTER", 1), "a")
+        reader.feed("KEY_A", 2)
+        self.assertEqual(reader.feed("KEY_ENTER", 1), "aa")
 
 
 if __name__ == "__main__":
