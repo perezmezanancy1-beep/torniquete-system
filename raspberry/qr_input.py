@@ -5,6 +5,9 @@ KEY_MAP = {
     **{f"KEY_{digit}": digit for digit in "0123456789"},
     **{f"KEY_{letter.upper()}": letter for letter in "abcdefghijklmnopqrstuvwxyz"},
     "KEY_MINUS": "-",
+    # En el teclado latinoamericano la tecla física AB10 (KEY_SLASH en
+    # evdev) corresponde a guion y, con Shift, a guion bajo.
+    "KEY_SLASH": "-",
     "KEY_EQUAL": "=",
 }
 
@@ -24,7 +27,7 @@ def keycode_to_character(keycode, shift_pressed=False):
     # Shift+0 para el signo "=" usado como padding por base64Url de Dart.
     if keycode == "KEY_0" and shift_pressed:
         return "="
-    if keycode == "KEY_MINUS" and shift_pressed:
+    if keycode in {"KEY_MINUS", "KEY_SLASH"} and shift_pressed:
         return "_"
     if keycode == "KEY_EQUAL" and shift_pressed:
         return "+"

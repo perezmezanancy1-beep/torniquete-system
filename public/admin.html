@@ -1,378 +1,950 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<title>Panel Administrativo</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Administración de acceso | UAC</title>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+  <style>
+    :root {
+      --uac-red: #b5122b;
+      --uac-red-dark: #81091d;
+      --uac-red-soft: #fff0f2;
+      --ink: #20242b;
+      --muted: #667085;
+      --line: #e5e7eb;
+      --surface: #ffffff;
+      --background: #f4f5f7;
+      --success: #087a49;
+      --success-soft: #e9f8f1;
+      --warning: #a15c00;
+      --warning-soft: #fff6e6;
+      --danger: #b42318;
+      --danger-soft: #fff0ee;
+      --shadow: 0 14px 36px rgba(32, 36, 43, .08);
+    }
 
-<!-- Firebase -->
-<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
 
-<!-- jQuery -->
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      background: var(--background);
+      font-family: Inter, "Segoe UI", Arial, sans-serif;
+    }
 
-<!-- Select2 -->
-<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet"/>
-<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    button, input, select { font: inherit; }
 
-<style>
-body{
-  margin:0;
-  font-family:Arial;
-  background:linear-gradient(135deg,#2c3e50,#d90429);
-}
-.header{
-  background:#1d3b73;
-  color:white;
-  padding:15px;
-  text-align:center;
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      min-height: 82px;
+      padding: 14px clamp(20px, 5vw, 72px);
+      color: #fff;
+      background: linear-gradient(105deg, var(--uac-red-dark), var(--uac-red));
+      box-shadow: 0 8px 28px rgba(129, 9, 29, .22);
+    }
 
-}
-.container{width:90%;margin:auto;}
-.card{
-  background:white;
-  padding:20px;
-  margin:20px;
-  border-radius:15px;
-}
-input,select{
-  padding:10px;
-  margin:5px;
-  border-radius:8px;
-  border:1px solid #ccc;
-}
-button{
-  padding:10px;
-  background:#1d3b73;
-  color:white;
-  border:none;
-  border-radius:8px;
-  cursor:pointer;
-}
-table{
-  width:100%;
-  border-collapse:collapse;
-}
-th{
-  background:#1d3b73;
-  color:white;
-  padding:10px;
-}
-td{
-  padding:10px;
-  text-align:center;
-}
-</style>
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      min-width: 0;
+    }
 
+    .brand img {
+      width: 52px;
+      height: 52px;
+      object-fit: contain;
+      border-radius: 50%;
+      background: #fff;
+      padding: 3px;
+    }
+
+    .brand strong, .brand span {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .brand strong { font-size: clamp(18px, 2vw, 23px); }
+    .brand span { margin-top: 3px; font-size: 13px; opacity: .85; }
+
+    .clock {
+      flex: 0 0 auto;
+      font-weight: 650;
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+    }
+
+    .shell {
+      width: min(1440px, calc(100% - 32px));
+      margin: 28px auto 56px;
+    }
+
+    .intro {
+      display: flex;
+      justify-content: space-between;
+      align-items: end;
+      gap: 24px;
+      margin-bottom: 22px;
+    }
+
+    h1, h2, h3, p { margin-top: 0; }
+    h1 { margin-bottom: 7px; font-size: clamp(25px, 3vw, 36px); }
+    h2 { margin-bottom: 6px; font-size: 21px; }
+    h3 { margin-bottom: 6px; font-size: 17px; }
+    .muted { color: var(--muted); }
+
+    .quick-links {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .quick-links a {
+      padding: 9px 13px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--ink);
+      background: #fff;
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 650;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.05fr) minmax(390px, .95fr);
+      gap: 22px;
+      align-items: start;
+    }
+
+    .card {
+      border: 1px solid rgba(229, 231, 235, .9);
+      border-radius: 18px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: start;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 22px 24px 0;
+    }
+
+    .card-body { padding: 22px 24px 24px; }
+
+    .eyebrow {
+      margin-bottom: 7px;
+      color: var(--uac-red);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .11em;
+      text-transform: uppercase;
+    }
+
+    .fields {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 15px;
+    }
+
+    .field { min-width: 0; }
+    .field.wide { grid-column: 1 / -1; }
+
+    label {
+      display: block;
+      margin-bottom: 7px;
+      color: #3e4652;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    input, select {
+      width: 100%;
+      min-height: 44px;
+      padding: 10px 12px;
+      border: 1px solid #cfd4dc;
+      border-radius: 10px;
+      color: var(--ink);
+      background: #fff;
+      outline: none;
+      transition: border-color .15s, box-shadow .15s;
+    }
+
+    input:focus, select:focus {
+      border-color: var(--uac-red);
+      box-shadow: 0 0 0 3px rgba(181, 18, 43, .12);
+    }
+
+    .actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 42px;
+      padding: 10px 16px;
+      border: 0;
+      border-radius: 10px;
+      font-weight: 750;
+      cursor: pointer;
+      transition: transform .15s, opacity .15s, background .15s;
+    }
+
+    .button:hover:not(:disabled) { transform: translateY(-1px); }
+    .button:disabled { cursor: not-allowed; opacity: .55; }
+    .button.primary { color: #fff; background: var(--uac-red); }
+    .button.primary:hover:not(:disabled) { background: var(--uac-red-dark); }
+    .button.secondary { color: var(--ink); background: #eef0f3; }
+    .button.danger { color: var(--danger); background: var(--danger-soft); }
+    .button.small { min-height: 34px; padding: 7px 10px; font-size: 13px; }
+
+    .person-preview {
+      display: grid;
+      grid-template-columns: 46px minmax(0, 1fr);
+      gap: 13px;
+      align-items: center;
+      margin: 16px 0 20px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 13px;
+      background: #fafafa;
+    }
+
+    .avatar {
+      display: grid;
+      place-items: center;
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      color: #fff;
+      background: var(--uac-red);
+      font-size: 18px;
+      font-weight: 800;
+    }
+
+    .person-preview strong, .person-preview span { display: block; }
+    .person-preview span { margin-top: 3px; color: var(--muted); font-size: 13px; }
+
+    .reader-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .reader-option {
+      position: relative;
+      display: block;
+      margin: 0;
+      padding: 16px;
+      border: 2px solid var(--line);
+      border-radius: 14px;
+      cursor: pointer;
+      transition: border-color .15s, background .15s;
+    }
+
+    .reader-option:has(input:checked) {
+      border-color: var(--uac-red);
+      background: var(--uac-red-soft);
+    }
+
+    .reader-option input {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      min-height: 0;
+      opacity: 0;
+    }
+
+    .reader-icon { font-size: 26px; }
+    .reader-option strong { display: block; margin-top: 9px; }
+    .reader-option span {
+      display: block;
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .enrollment-status {
+      display: flex;
+      gap: 12px;
+      align-items: start;
+      min-height: 72px;
+      margin: 18px 0;
+      padding: 14px;
+      border-radius: 12px;
+      background: #f1f3f5;
+    }
+
+    .status-dot {
+      flex: 0 0 auto;
+      width: 11px;
+      height: 11px;
+      margin-top: 5px;
+      border-radius: 50%;
+      background: #98a2b3;
+    }
+
+    .enrollment-status.pending { background: var(--warning-soft); }
+    .enrollment-status.pending .status-dot {
+      background: var(--warning);
+      animation: pulse 1.2s infinite;
+    }
+    .enrollment-status.success { background: var(--success-soft); }
+    .enrollment-status.success .status-dot { background: var(--success); }
+    .enrollment-status.error { background: var(--danger-soft); }
+    .enrollment-status.error .status-dot { background: var(--danger); }
+
+    @keyframes pulse {
+      50% { opacity: .35; transform: scale(.8); }
+    }
+
+    .status-copy strong, .status-copy span { display: block; }
+    .status-copy span { margin-top: 4px; color: var(--muted); font-size: 13px; }
+
+    .instruction {
+      margin: 0;
+      padding-left: 20px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    .users-card { margin-top: 22px; overflow: hidden; }
+    .table-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 0 24px 18px;
+    }
+    .table-toolbar input { max-width: 360px; }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td {
+      padding: 14px 16px;
+      border-top: 1px solid var(--line);
+      text-align: left;
+      vertical-align: middle;
+    }
+    th {
+      color: var(--muted);
+      background: #fafafa;
+      font-size: 12px;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+    td { font-size: 14px; }
+    .row-actions { display: flex; gap: 7px; justify-content: flex-end; }
+    .fingerprints { display: flex; gap: 5px; flex-wrap: wrap; }
+    .chip {
+      padding: 4px 7px;
+      border-radius: 999px;
+      color: var(--success);
+      background: var(--success-soft);
+      font-size: 11px;
+      font-weight: 750;
+    }
+
+    .toast {
+      position: fixed;
+      right: 24px;
+      bottom: 24px;
+      z-index: 50;
+      max-width: min(420px, calc(100vw - 48px));
+      padding: 14px 17px;
+      border-radius: 12px;
+      color: #fff;
+      background: #20242b;
+      box-shadow: 0 16px 38px rgba(0, 0, 0, .22);
+      opacity: 0;
+      transform: translateY(14px);
+      pointer-events: none;
+      transition: opacity .2s, transform .2s;
+    }
+    .toast.visible { opacity: 1; transform: translateY(0); }
+
+    @media (max-width: 920px) {
+      .grid { grid-template-columns: 1fr; }
+      .intro { align-items: start; flex-direction: column; }
+    }
+
+    @media (max-width: 620px) {
+      .topbar { padding: 12px 16px; }
+      .clock { display: none; }
+      .shell { width: min(100% - 20px, 1440px); margin-top: 18px; }
+      .fields, .reader-grid { grid-template-columns: 1fr; }
+      .card-header, .card-body { padding-left: 17px; padding-right: 17px; }
+      .table-toolbar { align-items: stretch; flex-direction: column; padding: 0 17px 15px; }
+      .table-toolbar input { max-width: none; }
+      th, td { padding: 12px; }
+    }
+  </style>
 </head>
-
 <body>
-
-<div class="header">Panel Administrativo</div>
-
-<div class="container">
-
-<!-- 🔊 SONIDO -->
-<audio id="okSound">
-  <source src="https://assets.mixkit.co/sfx/preview/mixkit-correct-answer-tone-2870.mp3" type="audio/mpeg">
-</audio>
-
-<!-- FORMULARIO -->
-<div class="card">
-
-<input id="cedula" placeholder="Cédula"
-oninput="this.value=this.value.replace(/[^0-9]/g,'')">
-
-<input id="nombre" placeholder="Nombre"
-oninput="this.value=this.value.toUpperCase().replace(/[^A-ZÑÁÉÍÓÚ\s]/g,'')">
-
-<select id="tipo">
-<option value="">Tipo</option>
-<option>ESTUDIANTE</option>
-<option>TRABAJADOR</option>
-<option>VISITANTE</option>
-
-</select>
-
-<select id="nivel" onchange="cargarCarreras()">
-<option value="">Nivel</option>
-<option value="PREGRADO">PREGRADO</option>
-<option value="POSGRADO">POSGRADO</option>
-<option value="DIPLOMADO">DIPLOMADO</option>
-<option value="TECNICO">TECNICO</option>
-</select>
-
-<select id="carrera" style="width:300px;"></select>
-
-<input id="celular" placeholder="Celular"
-oninput="this.value=this.value.replace(/[^0-9]/g,'')">
-
-<input id="correo" placeholder="Correo">
-
-<button onclick="registrar()">Registrar</button>
-
-</div>
-
-<!-- TABLA -->
-<div class="card">
-
-<h3>Usuarios Registrados</h3>
-
-<input id="buscador" placeholder="Buscar..." onkeyup="filtrar()">
-
-<table>
-<thead>
-<tr>
-<th>Cédula</th>
-<th>Nombre</th>
-<th>Tipo</th>
-<th>Carrera</th>
-<th>Acción</th>
-</tr>
-</thead>
-
-<tbody id="tablaUsuarios"></tbody>
-
-</table>
-
-</div>
-
-</div>
-
-<script>
-
-
-firebase.initializeApp({
-databaseURL:"https://torniquete-universidad-default-rtdb.firebaseio.com"
-});
-
-const db = firebase.database();
-
-let editando=false;
-let cedulaEditando=null;
-
-/* SELECT2 */
-$(document).ready(()=>{
- $("#carrera").select2({
-  placeholder:"Seleccione programa"
- });
-});
-
-/* CARRERAS COMPLETAS */
-function cargarCarreras(){
-
-let lista=[];
-const n = nivel.value;
-
-if(n === "PREGRADO"){
-lista=[
-"ADMINISTRACION DE EMPRESAS",
-"CONTADURIA PUBLICA",
-"COMUNICACION SOCIAL PERIODISMO",
-"ADMINISTRACION DE EMPRESAS TURISTICAS Y HOTELERAS",
-"INGENIERIA INDUSTRIAL",
-"INGENIERIA MECANICA",
-"DERECHO",
-"NEGOCIOS Y FINANZAS INTERNACIONALES",
-"PSICOLOGIA",
-"INGENIERIA MECATRONICA",
-"ADMINISTRACION MARITIMA Y FLUVIAL",
-"DISEÑO GRAFICO",
-"DISEÑO DE ESPACIOS",
-"DISEÑO DE MODAS",
-"DEPORTE Y CULTURA FISICA",
-"CIENCIAS POLITICAS",
-"COMUNICACION AUDIOVISUAL",
-"TECNICA PROFESIONAL EN OPERACIONES LOGISTICAS",
-"INGENIERIA ELECTRONICA",
-"INGENIERIA EN ANALITICA DE DATOS",
-"NEGOCIOS DIGITALES",
-"ARQUITECTURA",
-"INGENIERIA DE SISTEMAS"
-];
-}
-
-else if(n === "POSGRADO"){
-lista=[
-"ESPECIALIZACION EN TRIBUTACION",
-"ESPECIALIZACION EN ALTA GERENCIA",
-"ESPECIALIZACION EN GERENCIA DEL TALENTO HUMANO",
-"ESPECIALIZACION EN GERENCIA DE PRODUCCION Y OPERACIONES LOGISTICAS",
-"ESPECIALIZACION EN FINANZAS",
-"ESPECIALIZACION EN GERENCIA DE MERCADEO",
-"ESPECIALIZACION EN GESTION DE LA SEGURIDAD Y SALUD EN EL TRABAJO",
-"ESPECIALIZACION EN GERENCIA DE LA COMUNICACION ESTRATEGICA",
-"ESPECIALIZACION EN ASEGURAMIENTO DE LA INFORMACION FINANCIERA",
-"ESPECIALIZACION EN GERENCIA DE PROYECTOS",
-"ESPECIALIZACION EN INTELIGENCIA ARTIFICIAL",
-"MAESTRIA EN INGENIERIA MECANICA",
-"MAESTRIA EN MERCADEO",
-"MAESTRIA EN SISTEMAS DE GESTION",
-"MAESTRIA EN LOGISTICA INTEGRAL",
-"MAESTRIA EN EDUCACION",
-"MAESTRIA EN FINANZAS",
-"MAESTRIA EN ADMINISTRACION MBA",
-"MAESTRIA EN GESTION DE LA CALIDAD EN SERVICIOS DE SALUD",
-"MAESTRIA EN GOBERNABILIDAD E INNOVACION DEMOCRATICA Y DERECHOS HUMANOS",
-"MAESTRIA EN GERENCIA TRIBUTARIA"
-];
-}
-
-else if(n === "DIPLOMADO"){
-lista=[
-"DIPLOMADO EN CONTRATACION ESTATAL"
-];
-}
-
-else if(n === "TECNICO"){
-lista=[
-"TECNICO LABORAL EN AUXILIAR ADMINISTRATIVO",
-"TECNICO LABORAL EN AUXILIAR CONTABLE Y FINANCIERO",
-"TECNICO LABORAL EN AUXILIAR DE PRODUCCION GRAFICA Y ANIMACION DIGITAL",
-"TECNICO LABORAL EN AUXILIAR ENERGIA SOLAR FOTOVOLTAICA"
-];
-}
-
-
-$("#carrera").empty().select2({
-data: lista.map(x=>({id:x,text:x}))
-});
-
-}
-
-/* REGISTRAR */
-function registrar(){
-
-if(!cedula.value || !nombre.value || !tipo.value){
-alert("⚠️ Complete todos los campos");
-return;
-}
-
-if(!confirm("¿Confirma que los datos son correctos?")) return;
-
-let exp=null;
-
-if(tipo.value==="VISITANTE"){
-exp=Date.now()+7*60*60*1000;
-}
-
-const data={
-nombre:nombre.value,
-tipo:tipo.value,
-nivel:nivel.value,
-carrera:$("#carrera").val(),
-celular:celular.value,
-correo:correo.value,
-expiracion:exp
-};
-
-if(editando){
-db.ref("usuarios/"+cedulaEditando).update(data);
-}else{
-db.ref("usuarios/"+cedula.value).set(data);
-}
-
-document.getElementById("okSound").play();
-
-/* WhatsApp */
-if(tipo.value==="VISITANTE"){
-
-const link=`https://torniquete-system.onrender.com/qr.html?cedula=${cedula.value}`;
-const msg=encodeURIComponent(`🎓 Acceso autorizado\n${link}`);
-window.open(`https://wa.me/57${celular.value}?text=${msg}`);
-}
-
-limpiar();
-alert("✅ Guardado correctamente");
-
-}
-
-/* EDITAR */
-function editar(c){
-db.ref("usuarios/"+c).once("value").then(snap=>{
-let u=snap.val();
-cedula.value=c;
-nombre.value=u.nombre;
-tipo.value=u.tipo;
-nivel.value=u.nivel;
-celular.value=u.celular;
-correo.value=u.correo;
-
-cargarCarreras();
-
-setTimeout(()=>{
-$("#carrera").val(u.carrera).trigger("change");
-},200);
-
-editando=true;
-cedulaEditando=c;
-});
-}
-
-/* LIMPIAR */
-function limpiar(){
-cedula.value="";
-nombre.value="";
-tipo.value="";
-nivel.value="";
-celular.value="";
-correo.value="";
-$("#carrera").val(null).trigger("change");
-editando=false;
-cedulaEditando=null;
-}
-
-/* MOSTRAR */
-let listaUsuarios=[];
-
-db.ref("usuarios").on("value",snap=>{
-listaUsuarios=[];
-
-snap.forEach(c=>{
-listaUsuarios.push({cedula:c.key,...c.val()});
-});
-
-mostrar(listaUsuarios);
-});
-
-function mostrar(datos){
-
-let html="";
-
-datos.forEach(u=>{
-html+=`
-<tr>
-<td>${u.cedula}</td>
-<td>${u.nombre || ""}</td>
-<td>${u.tipo || ""}</td>
-<td>${u.carrera || ""}</td>
-<td>
-<button onclick="editar('${u.cedula}')">✏️</button>
-<button onclick="eliminar('${u.cedula}')">🗑️</button>
-</td>
-</tr>`;
-});
-
-tablaUsuarios.innerHTML=html;
-}
-
-/* ELIMINAR */
-function eliminar(c){
-if(confirm("Eliminar usuario?")){
-db.ref("usuarios/"+c).remove();
-}
-}
-
-/* FILTRAR */
-function filtrar(){
-const t=buscador.value.toLowerCase();
-mostrar(listaUsuarios.filter(u =>
-(u.nombre || "").toLowerCase().includes(t) ||
-u.cedula.includes(t)
-));
-}
-
-</script>
-
+  <header class="topbar">
+    <div class="brand">
+      <img src="img/logo1.png" alt="Escudo de la Universidad Autónoma del Caribe">
+      <div>
+        <strong>Universidad Autónoma del Caribe</strong>
+        <span>Administración de acceso</span>
+      </div>
+    </div>
+    <div class="clock" id="clock"></div>
+  </header>
+
+  <main class="shell">
+    <section class="intro">
+      <div>
+        <p class="eyebrow">Control institucional</p>
+        <h1>Panel administrativo</h1>
+        <p class="muted">Gestiona usuarios y registra huellas en el lector físico seleccionado.</p>
+      </div>
+      <nav class="quick-links" aria-label="Secciones">
+        <a href="#usuarios">Usuarios</a>
+        <a href="#huellas">Registro de huellas</a>
+      </nav>
+    </section>
+
+    <div class="grid">
+      <section class="card" id="usuarios">
+        <div class="card-header">
+          <div>
+            <p class="eyebrow">Datos personales</p>
+            <h2 id="formTitle">Registrar usuario</h2>
+            <p class="muted">Los campos marcados son necesarios para guardar.</p>
+          </div>
+        </div>
+        <div class="card-body">
+          <form id="userForm">
+            <div class="fields">
+              <div class="field">
+                <label for="cedula">Identificación *</label>
+                <input id="cedula" inputmode="numeric" autocomplete="off" required>
+              </div>
+              <div class="field">
+                <label for="nombre">Nombre *</label>
+                <input id="nombre" autocomplete="name" required>
+              </div>
+              <div class="field">
+                <label for="tipo">Tipo *</label>
+                <select id="tipo" required>
+                  <option value="">Selecciona</option>
+                  <option>ESTUDIANTE</option>
+                  <option>TRABAJADOR</option>
+                  <option>VISITANTE</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="nivel">Nivel</label>
+                <select id="nivel">
+                  <option value="">Selecciona</option>
+                  <option>PREGRADO</option>
+                  <option>POSGRADO</option>
+                  <option>DIPLOMADO</option>
+                  <option>TECNICO</option>
+                </select>
+              </div>
+              <div class="field wide">
+                <label for="carrera">Programa</label>
+                <select id="carrera"><option value="">Selecciona un nivel</option></select>
+              </div>
+              <div class="field">
+                <label for="celular">Celular</label>
+                <input id="celular" inputmode="tel" autocomplete="tel">
+              </div>
+              <div class="field">
+                <label for="correo">Correo</label>
+                <input id="correo" type="email" autocomplete="email">
+              </div>
+            </div>
+            <div class="actions">
+              <button class="button secondary" id="cancelEdit" type="button" hidden>Cancelar</button>
+              <button class="button primary" type="submit">Guardar usuario</button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <section class="card" id="huellas">
+        <div class="card-header">
+          <div>
+            <p class="eyebrow">Biometría</p>
+            <h2>Registrar una huella</h2>
+            <p class="muted">Elige la persona y el lector físico que vas a habilitar.</p>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="field">
+            <label for="fingerprintPerson">Persona</label>
+            <select id="fingerprintPerson">
+              <option value="">Selecciona una persona</option>
+            </select>
+          </div>
+
+          <div class="person-preview" id="personPreview">
+            <div class="avatar">—</div>
+            <div>
+              <strong>Ninguna persona seleccionada</strong>
+              <span>Busca por nombre o identificación en la lista.</span>
+            </div>
+          </div>
+
+          <label>Selecciona un lector</label>
+          <div class="reader-grid">
+            <label class="reader-option">
+              <input type="radio" name="reader" value="entrada" checked>
+              <span class="reader-icon">☝️</span>
+              <strong>Lector de entrada</strong>
+              <span>Sensor conectado a /dev/serial0</span>
+            </label>
+            <label class="reader-option">
+              <input type="radio" name="reader" value="salida">
+              <span class="reader-icon">☝️</span>
+              <strong>Lector de salida</strong>
+              <span>Sensor conectado a /dev/ttyUSB0</span>
+            </label>
+          </div>
+
+          <button class="button primary" id="activateFingerprint" type="button">
+            Habilitar lector y registrar
+          </button>
+
+          <div class="enrollment-status" id="enrollmentStatus" aria-live="polite">
+            <span class="status-dot"></span>
+            <div class="status-copy">
+              <strong>Lector en espera</strong>
+              <span>Selecciona una persona para iniciar.</span>
+            </div>
+          </div>
+
+          <ol class="instruction">
+            <li>Haz clic en habilitar y espera el aviso de voz.</li>
+            <li>Coloca el mismo dedo dos veces cuando el lector lo solicite.</li>
+            <li>Al finalizar escucharás la confirmación y verás el resultado aquí.</li>
+          </ol>
+        </div>
+      </section>
+    </div>
+
+    <section class="card users-card">
+      <div class="card-header">
+        <div>
+          <p class="eyebrow">Directorio</p>
+          <h2>Usuarios registrados</h2>
+        </div>
+        <strong id="userCount">0 usuarios</strong>
+      </div>
+      <div class="table-toolbar">
+        <input id="search" type="search" placeholder="Buscar por nombre o identificación">
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Identificación</th>
+              <th>Nombre</th>
+              <th>Tipo</th>
+              <th>Huellas</th>
+              <th style="text-align:right">Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="userRows"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <audio id="okSound" preload="auto" src="sounds/sounds-beep.mp3"></audio>
+  <div class="toast" id="toast" role="status"></div>
+
+  <script>
+    "use strict";
+
+    firebase.initializeApp({
+      databaseURL: "https://torniquete-universidad-default-rtdb.firebaseio.com"
+    });
+
+    const db = firebase.database();
+    const byId = (id) => document.getElementById(id);
+    const programs = {
+      PREGRADO: [
+        "ADMINISTRACION DE EMPRESAS", "CONTADURIA PUBLICA",
+        "COMUNICACION SOCIAL PERIODISMO",
+        "ADMINISTRACION DE EMPRESAS TURISTICAS Y HOTELERAS",
+        "INGENIERIA INDUSTRIAL", "INGENIERIA MECANICA", "DERECHO",
+        "NEGOCIOS Y FINANZAS INTERNACIONALES", "PSICOLOGIA",
+        "INGENIERIA MECATRONICA", "ADMINISTRACION MARITIMA Y FLUVIAL",
+        "DISEÑO GRAFICO", "DISEÑO DE ESPACIOS", "DISEÑO DE MODAS",
+        "DEPORTE Y CULTURA FISICA", "CIENCIAS POLITICAS",
+        "COMUNICACION AUDIOVISUAL",
+        "TECNICA PROFESIONAL EN OPERACIONES LOGISTICAS",
+        "INGENIERIA ELECTRONICA", "INGENIERIA EN ANALITICA DE DATOS",
+        "NEGOCIOS DIGITALES", "ARQUITECTURA", "INGENIERIA DE SISTEMAS"
+      ],
+      POSGRADO: [
+        "ESPECIALIZACION EN TRIBUTACION", "ESPECIALIZACION EN ALTA GERENCIA",
+        "ESPECIALIZACION EN GERENCIA DEL TALENTO HUMANO",
+        "ESPECIALIZACION EN GERENCIA DE PRODUCCION Y OPERACIONES LOGISTICAS",
+        "ESPECIALIZACION EN FINANZAS", "ESPECIALIZACION EN GERENCIA DE MERCADEO",
+        "ESPECIALIZACION EN GESTION DE LA SEGURIDAD Y SALUD EN EL TRABAJO",
+        "ESPECIALIZACION EN GERENCIA DE LA COMUNICACION ESTRATEGICA",
+        "ESPECIALIZACION EN ASEGURAMIENTO DE LA INFORMACION FINANCIERA",
+        "ESPECIALIZACION EN GERENCIA DE PROYECTOS",
+        "ESPECIALIZACION EN INTELIGENCIA ARTIFICIAL",
+        "MAESTRIA EN INGENIERIA MECANICA", "MAESTRIA EN MERCADEO",
+        "MAESTRIA EN SISTEMAS DE GESTION", "MAESTRIA EN LOGISTICA INTEGRAL",
+        "MAESTRIA EN EDUCACION", "MAESTRIA EN FINANZAS",
+        "MAESTRIA EN ADMINISTRACION MBA",
+        "MAESTRIA EN GESTION DE LA CALIDAD EN SERVICIOS DE SALUD",
+        "MAESTRIA EN GOBERNABILIDAD E INNOVACION DEMOCRATICA Y DERECHOS HUMANOS",
+        "MAESTRIA EN GERENCIA TRIBUTARIA"
+      ],
+      DIPLOMADO: ["DIPLOMADO EN CONTRATACION ESTATAL"],
+      TECNICO: [
+        "TECNICO LABORAL EN AUXILIAR ADMINISTRATIVO",
+        "TECNICO LABORAL EN AUXILIAR CONTABLE Y FINANCIERO",
+        "TECNICO LABORAL EN AUXILIAR DE PRODUCCION GRAFICA Y ANIMACION DIGITAL",
+        "TECNICO LABORAL EN AUXILIAR ENERGIA SOLAR FOTOVOLTAICA"
+      ]
+    };
+
+    let users = [];
+    let editingId = null;
+    let activeCommandId = null;
+    let statusTimer = null;
+    let toastTimer = null;
+
+    function updateClock() {
+      byId("clock").textContent = new Intl.DateTimeFormat("es-CO", {
+        dateStyle: "full",
+        timeStyle: "medium",
+        timeZone: "America/Bogota"
+      }).format(new Date());
+    }
+
+    function showToast(message) {
+      const toast = byId("toast");
+      toast.textContent = message;
+      toast.classList.add("visible");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove("visible"), 3500);
+    }
+
+    function setStatus(kind, title, detail) {
+      const status = byId("enrollmentStatus");
+      status.className = `enrollment-status ${kind || ""}`.trim();
+      status.querySelector("strong").textContent = title;
+      status.querySelector("span:last-child").textContent = detail;
+    }
+
+    function selectedUser() {
+      return users.find((user) => user.cedula === byId("fingerprintPerson").value);
+    }
+
+    function fingerprintSummary(user) {
+      const values = [];
+      if (user.huella_entrada_id !== undefined) values.push("Entrada");
+      if (user.huella_salida_id !== undefined) values.push("Salida");
+      if (user.huella_id !== undefined && values.length === 0) values.push("Anterior");
+      return values;
+    }
+
+    function refreshPersonPreview() {
+      const user = selectedUser();
+      const preview = byId("personPreview");
+      const avatar = preview.querySelector(".avatar");
+      const title = preview.querySelector("strong");
+      const detail = preview.querySelector("span");
+      if (!user) {
+        avatar.textContent = "—";
+        title.textContent = "Ninguna persona seleccionada";
+        detail.textContent = "Busca por nombre o identificación en la lista.";
+        return;
+      }
+      avatar.textContent = (user.nombre || "U").trim().charAt(0).toUpperCase();
+      title.textContent = user.nombre || `Usuario ${user.cedula}`;
+      const enrolled = fingerprintSummary(user);
+      detail.textContent = enrolled.length
+        ? `${user.cedula} · Huella: ${enrolled.join(" y ")}`
+        : `${user.cedula} · Sin huella registrada`;
+    }
+
+    function loadPrograms(selected = "") {
+      const select = byId("carrera");
+      select.replaceChildren(new Option("Selecciona un programa", ""));
+      (programs[byId("nivel").value] || []).forEach((program) => {
+        select.add(new Option(program, program));
+      });
+      select.value = selected || "";
+    }
+
+    function clearForm() {
+      byId("userForm").reset();
+      editingId = null;
+      byId("cedula").disabled = false;
+      byId("formTitle").textContent = "Registrar usuario";
+      byId("cancelEdit").hidden = true;
+      loadPrograms();
+    }
+
+    function editUser(user) {
+      editingId = user.cedula;
+      byId("cedula").value = user.cedula;
+      byId("cedula").disabled = true;
+      byId("nombre").value = user.nombre || "";
+      byId("tipo").value = user.tipo || "";
+      byId("nivel").value = user.nivel || "";
+      loadPrograms(user.carrera || "");
+      byId("celular").value = user.celular || "";
+      byId("correo").value = user.correo || "";
+      byId("formTitle").textContent = "Editar usuario";
+      byId("cancelEdit").hidden = false;
+      document.querySelector("#usuarios").scrollIntoView({ behavior: "smooth" });
+    }
+
+    async function deleteUser(user) {
+      if (!confirm(`¿Eliminar a ${user.nombre || user.cedula}?`)) return;
+      await db.ref(`usuarios/${user.cedula}`).remove();
+      showToast("Usuario eliminado.");
+    }
+
+    function selectForFingerprint(user) {
+      byId("fingerprintPerson").value = user.cedula;
+      refreshPersonPreview();
+      document.querySelector("#huellas").scrollIntoView({ behavior: "smooth" });
+    }
+
+    function makeButton(label, className, handler) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `button small ${className}`;
+      button.textContent = label;
+      button.addEventListener("click", handler);
+      return button;
+    }
+
+    function renderUsers() {
+      const query = byId("search").value.trim().toLowerCase();
+      const filtered = users.filter((user) =>
+        `${user.cedula} ${user.nombre || ""} ${user.tipo || ""}`
+          .toLowerCase()
+          .includes(query)
+      );
+      const body = byId("userRows");
+      body.replaceChildren();
+
+      filtered.forEach((user) => {
+        const row = document.createElement("tr");
+        [user.cedula, user.nombre || "", user.tipo || ""].forEach((value) => {
+          const cell = document.createElement("td");
+          cell.textContent = value;
+          row.appendChild(cell);
+        });
+
+        const fingerprintCell = document.createElement("td");
+        const chipWrap = document.createElement("div");
+        chipWrap.className = "fingerprints";
+        const fingerprints = fingerprintSummary(user);
+        if (fingerprints.length === 0) {
+          fingerprintCell.textContent = "Sin registrar";
+        } else {
+          fingerprints.forEach((label) => {
+            const chip = document.createElement("span");
+            chip.className = "chip";
+            chip.textContent = label;
+            chipWrap.appendChild(chip);
+          });
+          fingerprintCell.appendChild(chipWrap);
+        }
+        row.appendChild(fingerprintCell);
+
+        const actions = document.createElement("td");
+        actions.className = "row-actions";
+        actions.append(
+          makeButton("Huella", "primary", () => selectForFingerprint(user)),
+          makeButton("Editar", "secondary", () => editUser(user)),
+          makeButton("Eliminar", "danger", () => deleteUser(user))
+        );
+        row.appendChild(actions);
+        body.appendChild(row);
+      });
+
+      byId("userCount").textContent = `${users.length} usuarios`;
+    }
+
+    function refreshPersonOptions() {
+      const select = byId("fingerprintPerson");
+      const previous = select.value;
+      select.replaceChildren(new Option("Selecciona una persona", ""));
+      users
+        .slice()
+        .sort((a, b) => (a.nombre || "").localeCompare(b.nombre || "", "es"))
+        .forEach((user) => {
+          select.add(new Option(`${user.nombre || "Usuario"} — ${user.cedula}`, user.cedula));
+        });
+      if (users.some((user) => user.cedula === previous)) select.value = previous;
+      refreshPersonPreview();
+    }
+
+    async function activateFingerprint() {
+      const user = selectedUser();
+      const reader = document.querySelector('input[name="reader"]:checked')?.value;
+      if (!user || !reader) {
+        setStatus("error", "Falta información", "Selecciona una persona y un lector.");
+        return;
+      }
+
+      const button = byId("activateFingerprint");
+      button.disabled = true;
+      setStatus(
+        "pending",
+        `Activando lector de ${reader}`,
+        `Preparando el registro para ${user.nombre || user.cedula}.`
+      );
+
+      try {
+        const response = await fetch("/api/huellas/registrar", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ personaId: user.cedula, lector: reader })
+        });
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.mensaje || "No fue posible activar el lector.");
+        activeCommandId = data.comando.id;
+        setStatus("pending", "Lector habilitado", "Sigue las instrucciones de voz del torniquete.");
+        clearInterval(statusTimer);
+        statusTimer = setInterval(checkFingerprintStatus, 900);
+        checkFingerprintStatus();
+      } catch (error) {
+        button.disabled = false;
+        setStatus("error", "No se pudo iniciar", error.message);
+      }
+    }
+
+    async function checkFingerprintStatus() {
+      if (!activeCommandId) return;
+      try {
+        const response = await fetch(
+          `/api/huellas/estado?id=${encodeURIComponent(activeCommandId)}`,
+          { cache: "no-store" }
+        );
+        const data = await response.json();
+        if (!response.ok || !data.ok || !data.comando) {
+          throw new Error(data.mensaje || "No se encontró el registro.");
+        }
+        const command = data.comando;
+        if (command.estado === "completado") {
+          clearInterval(statusTimer);
+          activeCommandId = null;
+          byId("activateFingerprint").disabled = false;
+          setStatus(
+            "success",
+            "Huella registrada",
+            `${command.mensaje} Identificador ${command.huellaId}.`
+          );
+          byId("okSound").play().catch(() => {});
+          showToast("Huella registrada correctamente.");
+        } else if (command.estado === "error") {
+          clearInterval(statusTimer);
+          activeCommandId = null;
+          byId("activateFingerprint").disabled = false;
+          setStatus("error", "Registro incompleto", command.mensaje);
+        } else {
+          setStatus(
+            "pending",
+            command.estado === "procesando" ? "Leyendo la huella" : "Lector habilitado",
+            command.mensaje || "Sigue las instrucciones de voz."
+          );
+        }
+      } catch (error) {
+        clearInterval(statusTimer);
+        activeCommandId = null;
+        byId("activateFingerprint").disabled = false;
+        setStatus("error", "Sin respuesta del lector", error.message);
+      }
+    }
+
+    byId("cedula").addEventListener("input", (event) => {
+      event.target.value = event.target.value.replace(/\D/g, "");
+    });
+    byId("celular").addEventListener("input", (event) => {
+      event.target.value = event.target.value.replace(/\D/g, "");
+    });
+    byId("nombre").addEventListener("input", (event) => {
+      event.target.value = event.target.value.toUpperCase();
+    });
+    byId("nivel").addEventListener("change", () => loadPrograms());
+    byId("cancelEdit").addEventListener("click", clearForm);
+    byId("search").addEventListener("input", renderUsers);
+    byId("fingerprintPerson").addEventListener("change", refreshPersonPreview);
+    byId("activateFingerprint").addEventListener("click", activateFingerprint);
+
+    byId("userForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const id = editingId || byId("cedula").value.trim();
+      if (!/^\d+$/.test(id)) {
+        showToast("La identificación debe ser numérica.");
+        return;
+      }
+      const visitor = byId("tipo").value === "VISITANTE";
+      const data = {
+        nombre: byId("nombre").value.trim().toUpperCase(),
+        tipo: byId("tipo").value,
+        nivel: byId("nivel").value,
+        carrera: byId("carrera").value,
+        celular: byId("celular").value.trim(),
+        correo: byId("correo").value.trim(),
+        expiracion: visitor ? Date.now() + 7 * 60 * 60 * 1000 : null
+      };
+      if (!data.nombre || !data.tipo) {
+        showToast("Completa el nombre y el tipo de usuario.");
+        return;
+      }
+      await db.ref(`usuarios/${id}`)[editingId ? "update" : "set"](data);
+      if (visitor && data.celular) {
+        const link = `https://torniquete-system.onrender.com/qr.html?cedula=${id}`;
+        const message = encodeURIComponent(`Acceso autorizado UAC\n${link}`);
+        window.open(`https://wa.me/57${data.celular}?text=${message}`, "_blank");
+      }
+      byId("okSound").play().catch(() => {});
+      clearForm();
+      showToast("Usuario guardado correctamente.");
+    });
+
+    db.ref("usuarios").on("value", (snapshot) => {
+      users = [];
+      snapshot.forEach((child) => {
+        users.push({ cedula: child.key, ...(child.val() || {}) });
+      });
+      renderUsers();
+      refreshPersonOptions();
+    });
+
+    updateClock();
+    setInterval(updateClock, 1000);
+    loadPrograms();
+  </script>
 </body>
 </html>

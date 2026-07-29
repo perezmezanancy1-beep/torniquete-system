@@ -32,6 +32,10 @@ URL_HEALTH = "https://torniquete-system.onrender.com/health"
 URL_FIREBASE = (
     "https://torniquete-universidad-default-rtdb.firebaseio.com/usuarios"
 )
+URL_FINGERPRINT_CONTROL = (
+    "https://torniquete-universidad-default-rtdb.firebaseio.com/"
+    "controlHuella/actual"
+)
 QR_DEVICE = (
     "/dev/input/by-id/"
     "usb-BF_SCAN_SCAN_KEYBOARD_A-00000-event-kbd"
@@ -46,11 +50,16 @@ PIPER_MODEL = "/home/pirb/voices/es_MX-ald-medium.onnx"
 VOICE_CACHE_DIR = "/home/pirb/.torniquete_voice_cache"
 REQUEST_TIMEOUT = (4, 35)
 QR_DEDUP_SECONDS = 3
+FINGERPRINT_ENROLL_TIMEOUT_SECONDS = 35
 LOG_FULL_QR = os.environ.get("TORNIQUETE_LOG_FULL_QR") == "1"
 
 stop_event = threading.Event()
 voice_queue = queue.Queue(maxsize=10)
 qr_queue = queue.Queue(maxsize=5)
+fingerprint_enrollment_queues = {
+    "entrada": queue.Queue(maxsize=1),
+    "salida": queue.Queue(maxsize=1),
+}
 relay_locks = {
     RELE_ENTRADA: threading.Lock(),
     RELE_SALIDA: threading.Lock(),
@@ -58,6 +67,8 @@ relay_locks = {
 
 users_cache = {"expires_at": 0.0, "data": {}}
 users_cache_lock = threading.Lock()
+fingerprint_commands_seen = set()
+fingerprint_commands_lock = threading.Lock()
 instance_lock_file = None
 
 
@@ -420,9 +431,21 @@ def fetch_users(force=False):
             return users_cache["data"]
 
 
-def find_person_by_fingerprint(fingerprint_id):
+def fingerprint_field(direction):
+    return (
+        "huella_entrada_id"
+        if direction == "entrada"
+        else "huella_salida_id"
+    )
+
+
+def find_person_by_fingerprint(fingerprint_id, direction):
+    field = fingerprint_field(direction)
     for person_id, user in fetch_users().items():
-        if str(user.get("huella_id")) == str(fingerprint_id):
+        assigned_id = user.get(field)
+        if assigned_id is None:
+            assigned_id = user.get("huella_id")
+        if str(assigned_id) == str(fingerprint_id):
             return str(person_id), user
     return None, None
 
@@ -482,13 +505,218 @@ def initialize_fingerprint_sensor(path, name):
     return None
 
 
+def update_fingerprint_command(command_id, **values):
+    values["actualizado"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+    try:
+        current = http.get(
+            f"{URL_FINGERPRINT_CONTROL}.json",
+            timeout=REQUEST_TIMEOUT,
+        )
+        current.raise_for_status()
+        current_data = current.json() or {}
+        if str(current_data.get("id")) != str(command_id):
+            return False
+        response = http.patch(
+            f"{URL_FINGERPRINT_CONTROL}.json",
+            json=values,
+            timeout=REQUEST_TIMEOUT,
+        )
+        response.raise_for_status()
+        return True
+    except (requests.RequestException, ValueError) as error:
+        print(f"Error actualizando comando de huella: {error}", flush=True)
+        return False
+
+
+def fingerprint_command_worker():
+    while not stop_event.is_set():
+        try:
+            response = http.get(
+                f"{URL_FINGERPRINT_CONTROL}.json",
+                timeout=REQUEST_TIMEOUT,
+            )
+            response.raise_for_status()
+            command = response.json() or {}
+            command_id = str(command.get("id") or "")
+            direction = str(command.get("lector") or "").lower()
+            expiration = int(command.get("expiraEpochMs") or 0)
+            if (
+                command.get("estado") == "pendiente"
+                and command_id
+                and direction in fingerprint_enrollment_queues
+            ):
+                if expiration and int(time.time() * 1000) > expiration:
+                    update_fingerprint_command(
+                        command_id,
+                        estado="error",
+                        mensaje=(
+                            "La solicitud expiró antes de llegar al lector."
+                        ),
+                    )
+                    stop_event.wait(0.75)
+                    continue
+                with fingerprint_commands_lock:
+                    if command_id in fingerprint_commands_seen:
+                        stop_event.wait(0.5)
+                        continue
+                    target_queue = fingerprint_enrollment_queues[direction]
+                    try:
+                        target_queue.put_nowait(command)
+                    except queue.Full:
+                        stop_event.wait(0.5)
+                        continue
+                    fingerprint_commands_seen.add(command_id)
+                    print(
+                        "COMANDO HUELLA "
+                        f"id={command_id} persona={command.get('personaId')} "
+                        f"lector={direction}",
+                        flush=True,
+                    )
+        except (requests.RequestException, ValueError) as error:
+            print(f"Control de huella no disponible: {error}", flush=True)
+        stop_event.wait(0.75)
+
+
+def wait_for_finger(sensor, present, timeout_seconds):
+    deadline = time.monotonic() + timeout_seconds
+    while not stop_event.is_set() and time.monotonic() < deadline:
+        if bool(sensor.readImage()) is present:
+            return True
+        stop_event.wait(0.08)
+    return False
+
+
+def assign_fingerprint_to_person(person_id, direction, position):
+    field = fingerprint_field(direction)
+    users = fetch_users(force=True)
+    for existing_person_id, user in users.items():
+        assigned_id = user.get(field)
+        if assigned_id is None:
+            assigned_id = user.get("huella_id")
+        if (
+            str(assigned_id) == str(position)
+            and str(existing_person_id) != str(person_id)
+        ):
+            raise RuntimeError(
+                "La huella ya pertenece a otra persona en este lector"
+            )
+
+    response = http.patch(
+        f"{URL_FIREBASE}/{person_id}.json",
+        json={field: int(position)},
+        timeout=REQUEST_TIMEOUT,
+    )
+    response.raise_for_status()
+    with users_cache_lock:
+        users_cache["expires_at"] = 0
+
+
+def enroll_fingerprint(sensor, command, direction):
+    command_id = str(command.get("id") or "")
+    person_id = str(command.get("personaId") or "")
+    reader_label = "entrada" if direction == "entrada" else "salida"
+    if not command_id or not person_id.isdigit():
+        return
+
+    update_fingerprint_command(
+        command_id,
+        estado="procesando",
+        mensaje=f"Coloque el dedo en el lector de {reader_label}.",
+    )
+    enqueue_voice(
+        f"Lector de {reader_label} habilitado. Coloque el dedo"
+    )
+
+    try:
+        if not wait_for_finger(
+            sensor,
+            True,
+            FINGERPRINT_ENROLL_TIMEOUT_SECONDS,
+        ):
+            raise TimeoutError("Tiempo agotado esperando el primer dedo")
+
+        sensor.convertImage(0x01)
+        existing_position, _accuracy = sensor.searchTemplate()
+
+        if existing_position >= 0:
+            assign_fingerprint_to_person(
+                person_id,
+                direction,
+                existing_position,
+            )
+            position = existing_position
+        else:
+            enqueue_voice("Retire el dedo")
+            if not wait_for_finger(sensor, False, 12):
+                raise TimeoutError("No se retiró el dedo")
+
+            enqueue_voice("Coloque nuevamente el mismo dedo")
+            update_fingerprint_command(
+                command_id,
+                estado="procesando",
+                mensaje="Coloque nuevamente el mismo dedo.",
+            )
+            if not wait_for_finger(
+                sensor,
+                True,
+                FINGERPRINT_ENROLL_TIMEOUT_SECONDS,
+            ):
+                raise TimeoutError("Tiempo agotado esperando la segunda muestra")
+
+            sensor.convertImage(0x02)
+            if sensor.compareCharacteristics() == 0:
+                raise RuntimeError("Las dos muestras no corresponden")
+
+            sensor.createTemplate()
+            position = sensor.storeTemplate()
+            assign_fingerprint_to_person(person_id, direction, position)
+
+        update_fingerprint_command(
+            command_id,
+            estado="completado",
+            mensaje="Huella registrada correctamente.",
+            huellaId=int(position),
+        )
+        print(
+            "HUELLA REGISTRADA "
+            f"persona={person_id} lector={direction} id={position}",
+            flush=True,
+        )
+        enqueue_voice("Huella registrada correctamente")
+        wait_for_finger(sensor, False, 10)
+    except Exception as error:
+        message = str(error) or "No fue posible registrar la huella"
+        print(
+            f"ERROR REGISTRO HUELLA persona={person_id}: {message}",
+            flush=True,
+        )
+        update_fingerprint_command(
+            command_id,
+            estado="error",
+            mensaje=message,
+        )
+        enqueue_voice("No fue posible registrar la huella")
+
+
 def fingerprint_worker(path, name, direction):
+    enrollment_queue = fingerprint_enrollment_queues[direction]
     while not stop_event.is_set():
         sensor = initialize_fingerprint_sensor(path, name)
         if sensor is None:
             return
         try:
             while not stop_event.is_set():
+                try:
+                    command = enrollment_queue.get_nowait()
+                except queue.Empty:
+                    command = None
+                if command is not None:
+                    try:
+                        enroll_fingerprint(sensor, command, direction)
+                    finally:
+                        enrollment_queue.task_done()
+                    continue
+
                 if not sensor.readImage():
                     stop_event.wait(0.08)
                     continue
@@ -501,7 +729,10 @@ def fingerprint_worker(path, name, direction):
                         f"id={position} precision={accuracy}",
                         flush=True,
                     )
-                    person_id, user = find_person_by_fingerprint(position)
+                    person_id, user = find_person_by_fingerprint(
+                        position,
+                        direction,
+                    )
                     if person_id:
                         process_fingerprint(person_id, user, direction)
                     else:
@@ -535,6 +766,11 @@ def main():
         threading.Thread(
             target=backend_keepalive_worker,
             name="backend-keepalive",
+            daemon=True,
+        ),
+        threading.Thread(
+            target=fingerprint_command_worker,
+            name="fingerprint-command",
             daemon=True,
         ),
         threading.Thread(target=qr_reader_worker, name="qr-reader", daemon=True),

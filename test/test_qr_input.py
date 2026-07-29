@@ -13,6 +13,8 @@ class QrInputTests(unittest.TestCase):
         self.assertEqual(keycode_to_character("KEY_A", True), "A")
         self.assertEqual(keycode_to_character("KEY_MINUS"), "-")
         self.assertEqual(keycode_to_character("KEY_MINUS", True), "_")
+        self.assertEqual(keycode_to_character("KEY_SLASH"), "-")
+        self.assertEqual(keycode_to_character("KEY_SLASH", True), "_")
         self.assertEqual(keycode_to_character("KEY_EQUAL"), "=")
         self.assertEqual(keycode_to_character("KEY_0", True), "=")
 

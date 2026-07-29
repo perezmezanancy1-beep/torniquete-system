@@ -17,6 +17,7 @@ const {
 
 const VISITOR_DURATION_MS = 7 * 60 * 60 * 1000;
 const MOVEMENT_COOLDOWN_MS = 10_000;
+const FINGERPRINT_COMMAND_TTL_MS = 2 * 60_000;
 
 const app = express();
 app.disable("x-powered-by");
@@ -93,6 +94,64 @@ function publicPerson(personaId, user, codigoRol, institutionalName = null) {
     codigoRol,
     rol: ROLES[codigoRol],
   };
+}
+
+function normalizeFingerprintReader(value) {
+  const reader = String(value ?? "").trim().toLowerCase();
+  return reader === "entrada" || reader === "salida" ? reader : null;
+}
+
+function publicFingerprintCommand(command) {
+  if (!command || typeof command !== "object") {
+    return null;
+  }
+  return {
+    id: String(command.id ?? ""),
+    personaId: Number(command.personaId),
+    nombre: String(command.nombre ?? ""),
+    lector: String(command.lector ?? ""),
+    estado: String(command.estado ?? ""),
+    mensaje: String(command.mensaje ?? ""),
+    huellaId:
+      command.huellaId !== null &&
+      command.huellaId !== undefined &&
+      Number.isInteger(Number(command.huellaId))
+      ? Number(command.huellaId)
+      : null,
+    creado: String(command.creado ?? ""),
+    actualizado: String(command.actualizado ?? ""),
+  };
+}
+
+async function refreshStoredPersonName(personaId, ref, currentName) {
+  const freshName = await fetchPersonName(personaId);
+  if (!freshName) {
+    return null;
+  }
+  if (freshName !== currentName) {
+    await ref.update({
+      nombre: freshName,
+      nombreEpicaActualizado: new Date().toISOString(),
+    });
+    console.log(`Nombre Epica actualizado: ${personaId} -> ${freshName}`);
+  }
+  return freshName;
+}
+
+async function currentPersonName(personaId, ref, storedName) {
+  const lookup = refreshStoredPersonName(personaId, ref, storedName).catch(
+    (error) => {
+      console.warn(
+        `No fue posible refrescar nombre Epica ${personaId}:`,
+        error.message
+      );
+      return null;
+    }
+  );
+  const timeout = new Promise((resolve) => {
+    setTimeout(() => resolve(null), 800);
+  });
+  return (await Promise.race([lookup, timeout])) || storedName || null;
 }
 
 function colombiaDateTime(date) {
@@ -344,8 +403,11 @@ app.post("/validar", async (req, res) => {
     const personaId = String(info.personaId);
     const ref = db.ref(`usuarios/${personaId}`);
     const snapshot = await ref.once("value");
-    let institutionalName = snapshot.exists()
+    const storedName = snapshot.exists()
       ? String(snapshot.val()?.nombre ?? "").trim() || null
+      : null;
+    let institutionalName = snapshot.exists()
+      ? await currentPersonName(personaId, ref, storedName)
       : await fetchPersonName(personaId);
 
     let user;
@@ -371,6 +433,9 @@ app.post("/validar", async (req, res) => {
       console.log(`Usuario Mi Pase registrado automáticamente: ${personaId}`);
     } else {
       user = snapshot.val();
+      if (institutionalName && institutionalName !== storedName) {
+        user.nombre = institutionalName;
+      }
     }
 
     const storedRole = roleCodeFor(user);
@@ -467,6 +532,109 @@ app.post("/validar", async (req, res) => {
 
 app.get("/health", (req, res) => {
   res.json({ ok: true });
+});
+
+app.post("/api/huellas/registrar", async (req, res) => {
+  try {
+    const personaId = normalizePersonaId(
+      req.body?.personaId ?? req.body?.cedula
+    );
+    const lector = normalizeFingerprintReader(req.body?.lector);
+    if (!personaId || !lector) {
+      return res.status(400).json({
+        ok: false,
+        error: "DATOS_HUELLA_INVALIDOS",
+        mensaje: "Selecciona una persona y un lector válidos.",
+      });
+    }
+
+    const userSnapshot = await db.ref(`usuarios/${personaId}`).once("value");
+    if (!userSnapshot.exists()) {
+      return res.status(404).json({
+        ok: false,
+        error: "USUARIO_NO_ENCONTRADO",
+        mensaje: "La persona no está registrada.",
+      });
+    }
+
+    const user = userSnapshot.val();
+    const now = Date.now();
+    const command = {
+      id: crypto.randomUUID(),
+      personaId: Number(personaId),
+      nombre: String(user?.nombre ?? "").trim() || `Usuario ${personaId}`,
+      lector,
+      estado: "pendiente",
+      mensaje: `Esperando el lector de ${lector}.`,
+      creado: new Date(now).toISOString(),
+      actualizado: new Date(now).toISOString(),
+      expira: new Date(now + FINGERPRINT_COMMAND_TTL_MS).toISOString(),
+      expiraEpochMs: now + FINGERPRINT_COMMAND_TTL_MS,
+    };
+
+    const commandRef = db.ref("controlHuella/actual");
+    const result = await commandRef.transaction((current) => {
+      const currentState = String(current?.estado ?? "");
+      const expiration = new Date(current?.expira ?? 0).getTime();
+      const currentIsActive =
+        (currentState === "pendiente" || currentState === "procesando") &&
+        Number.isFinite(expiration) &&
+        expiration > now;
+      return currentIsActive ? undefined : command;
+    });
+
+    if (!result.committed) {
+      return res.status(409).json({
+        ok: false,
+        error: "LECTOR_OCUPADO",
+        mensaje: "Ya hay un registro de huella en curso.",
+        comando: publicFingerprintCommand(result.snapshot.val()),
+      });
+    }
+
+    console.log(
+      `Registro de huella solicitado: persona=${personaId} lector=${lector}`
+    );
+    return res.status(202).json({
+      ok: true,
+      mensaje: `Lector de ${lector} habilitado.`,
+      comando: publicFingerprintCommand(command),
+    });
+  } catch (error) {
+    console.error("Error solicitando registro de huella:", error.message);
+    return res.status(500).json({
+      ok: false,
+      error: "ERROR_REGISTRO_HUELLA",
+      mensaje: "No fue posible habilitar el lector de huella.",
+    });
+  }
+});
+
+app.get("/api/huellas/estado", async (req, res) => {
+  try {
+    const snapshot = await db.ref("controlHuella/actual").once("value");
+    const command = publicFingerprintCommand(snapshot.val());
+    if (
+      req.query?.id &&
+      command &&
+      String(req.query.id) !== command.id
+    ) {
+      return res.status(404).json({
+        ok: false,
+        error: "COMANDO_NO_ENCONTRADO",
+        mensaje: "El registro solicitado ya no está activo.",
+      });
+    }
+    res.set("Cache-Control", "no-store");
+    return res.json({ ok: true, comando: command });
+  } catch (error) {
+    console.error("Error consultando estado de huella:", error.message);
+    return res.status(500).json({
+      ok: false,
+      error: "ERROR_ESTADO_HUELLA",
+      mensaje: "No fue posible consultar el lector.",
+    });
+  }
 });
 
 app.get("/", (req, res) => {
