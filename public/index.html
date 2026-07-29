@@ -1,89 +1,434 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Welcome to Firebase Hosting</title>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Control de acceso UAC</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --red: #c4112a;
+      --red-dark: #960c20;
+      --gold: #f4c400;
+      --green: #15803d;
+      --surface: #ffffff;
+      --background: #f3f4f6;
+      --text: #182230;
+      --muted: #667085;
+    }
 
-    <!-- update the version number as needed -->
-    <script defer src="/__/firebase/12.14.0/firebase-app-compat.js"></script>
-    <!-- include only the Firebase features as you need -->
-    <script defer src="/__/firebase/12.14.0/firebase-auth-compat.js"></script>
-    <script defer src="/__/firebase/12.14.0/firebase-database-compat.js"></script>
-    <script defer src="/__/firebase/12.14.0/firebase-firestore-compat.js"></script>
-    <script defer src="/__/firebase/12.14.0/firebase-functions-compat.js"></script>
-    <script defer src="/__/firebase/12.14.0/firebase-messaging-compat.js"></script>
-    <script defer src="/__/firebase/12.14.0/firebase-storage-compat.js"></script>
-    <script defer src="/__/firebase/12.14.0/firebase-analytics-compat.js"></script>
-    <script defer src="/__/firebase/12.14.0/firebase-remote-config-compat.js"></script>
-    <script defer src="/__/firebase/12.14.0/firebase-performance-compat.js"></script>
-    <!-- 
-      initialize the SDK after all desired features are loaded, set useEmulator to false
-      to avoid connecting the SDK to running emulators.
-    -->
-    <script defer src="/__/firebase/init.js?useEmulator=true"></script>
+    * { box-sizing: border-box; }
 
-    <style media="screen">
-      body { background: #ECEFF1; color: rgba(0,0,0,0.87); font-family: Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; }
-      #message { background: white; max-width: 360px; margin: 100px auto 16px; padding: 32px 24px; border-radius: 3px; }
-      #message h2 { color: #ffa100; font-weight: bold; font-size: 16px; margin: 0 0 8px; }
-      #message h1 { font-size: 22px; font-weight: 300; color: rgba(0,0,0,0.6); margin: 0 0 16px;}
-      #message p { line-height: 140%; margin: 16px 0 24px; font-size: 14px; }
-      #message a { display: block; text-align: center; background: #039be5; text-transform: uppercase; text-decoration: none; color: white; padding: 16px; border-radius: 4px; }
-      #message, #message a { box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24); }
-      #load { color: rgba(0,0,0,0.4); text-align: center; font-size: 13px; }
-      @media (max-width: 600px) {
-        body, #message { margin-top: 0; background: white; box-shadow: none; }
-        body { border-top: 16px solid #ffa100; }
-      }
-    </style>
-  </head>
-  <body>
-    <div id="message">
-      <h2>Welcome</h2>
-      <h1>Firebase Hosting Setup Complete</h1>
-      <p>You're seeing this because you've successfully setup Firebase Hosting. Now it's time to go build something extraordinary!</p>
-      <a target="_blank" href="https://firebase.google.com/docs/hosting/">Open Hosting Documentation</a>
+    html, body {
+      width: 100%;
+      min-height: 100%;
+      margin: 0;
+      font-family: "Segoe UI", Arial, sans-serif;
+      color: var(--text);
+      background: var(--background);
+    }
+
+    body {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto 5px 1fr auto;
+    }
+
+    header {
+      min-height: 96px;
+      display: flex;
+      align-items: center;
+      gap: 22px;
+      padding: 14px 24px;
+      color: white;
+      background: var(--red);
+    }
+
+    header img {
+      width: 176px;
+      max-height: 68px;
+      object-fit: contain;
+    }
+
+    .header-copy {
+      padding-left: 22px;
+      border-left: 1px solid rgba(255,255,255,.35);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(1.3rem, 2vw, 1.9rem);
+    }
+
+    .header-copy p {
+      margin: 4px 0 0;
+      color: #f9d5da;
+    }
+
+    .gold-line { background: var(--gold); }
+
+    main {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1.65fr) minmax(340px, .85fr);
+      gap: 18px;
+      padding: 18px;
+    }
+
+    .camera-card, .status-card {
+      overflow: hidden;
+      border: 1px solid #dfe3e8;
+      border-radius: 18px;
+      background: var(--surface);
+      box-shadow: 0 8px 22px rgba(16,24,40,.08);
+    }
+
+    .camera-card {
+      min-height: 520px;
+      position: relative;
+      display: grid;
+      place-items: center;
+    }
+
+    video {
+      width: 100%;
+      height: 100%;
+      min-height: 520px;
+      object-fit: cover;
+      background: white;
+    }
+
+    .scan-guide {
+      position: absolute;
+      width: min(44%, 380px);
+      aspect-ratio: 1;
+      border: 2px solid rgba(255,255,255,.55);
+      border-radius: 20px;
+      box-shadow: 0 0 0 9999px rgba(0,0,0,.32);
+      pointer-events: none;
+    }
+
+    .scan-guide::before,
+    .scan-guide::after {
+      content: "";
+      position: absolute;
+      inset: -5px;
+      border-radius: 22px;
+      border: 8px solid var(--gold);
+      clip-path: polygon(0 0, 28% 0, 28% 4%, 4% 4%, 4% 28%, 0 28%,
+                         0 72%, 4% 72%, 4% 96%, 28% 96%, 28% 100%, 0 100%);
+    }
+
+    .scan-guide::after { transform: rotate(180deg); }
+
+    .camera-help {
+      position: absolute;
+      bottom: 22px;
+      margin: 0;
+      padding: 10px 16px;
+      border-radius: 999px;
+      color: white;
+      background: rgba(0,0,0,.68);
+      font-weight: 700;
+    }
+
+    .status-card {
+      min-height: 320px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 34px;
+      border-top: 8px solid var(--gold);
+      text-align: center;
+    }
+
+    .status-card.valid {
+      color: white;
+      border-color: #0f5f2d;
+      background: var(--green);
+    }
+
+    .status-card.invalid {
+      color: white;
+      border-color: var(--gold);
+      background: var(--red);
+    }
+
+    #statusTitle {
+      margin: 0;
+      font-size: clamp(1.8rem, 3vw, 3rem);
+    }
+
+    #personName {
+      margin: 22px 0 4px;
+      font-size: clamp(1.3rem, 2.2vw, 2rem);
+    }
+
+    #personInfo, #statusDetail {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 1.05rem;
+    }
+
+    .valid #personInfo, .valid #statusDetail,
+    .invalid #personInfo, .invalid #statusDetail {
+      color: rgba(255,255,255,.88);
+    }
+
+    #startButton {
+      align-self: center;
+      min-width: 220px;
+      margin-top: 24px;
+      padding: 13px 20px;
+      border: 0;
+      border-radius: 12px;
+      color: white;
+      background: var(--red);
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    footer {
+      display: flex;
+      justify-content: space-between;
+      padding: 14px 22px;
+      color: white;
+      background: var(--red-dark);
+    }
+
+    @media (max-width: 900px) {
+      main { grid-template-columns: 1fr; }
+      .camera-card, video { min-height: 420px; }
+      header img { width: 135px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <img src="img/logo1.png" alt="Universidad Autónoma del Caribe">
+    <div class="header-copy">
+      <h1>Control de acceso</h1>
+      <p>Lector institucional de códigos MiPase</p>
     </div>
-    <p id="load">Firebase SDK Loading&hellip;</p>
+  </header>
+  <div class="gold-line"></div>
 
-    <script>
-      document.addEventListener('DOMContentLoaded', function() {
-        const loadEl = document.querySelector('#load');
-        // // ------------
-        // // The Firebase SDK is initialized and available here!
-        //
-        // firebase.auth().onAuthStateChanged(user => { });
-        // firebase.database().ref('/path/to/ref').on('value', snapshot => { });
-        // firebase.firestore().doc('/foo/bar').get().then(() => { });
-        // firebase.functions().httpsCallable('yourFunction')().then(() => { });
-        // firebase.messaging().requestPermission().then(() => { });
-        // firebase.storage().ref('/path/to/ref').getDownloadURL().then(() => { });
-        // firebase.analytics(); // call to activate
-        // firebase.analytics().logEvent('tutorial_completed');
-        // firebase.performance(); // call to activate
-        //
-        // // ----------
+  <main>
+    <section class="camera-card">
+      <video id="video" autoplay muted playsinline></video>
+      <div class="scan-guide" aria-hidden="true"></div>
+      <p class="camera-help">Ubique el código QR dentro del recuadro</p>
+    </section>
 
-        try {
-          let app = firebase.app();
-          let features = [
-            'auth', 
-            'database', 
-            'firestore',
-            'functions',
-            'messaging', 
-            'storage', 
-            'analytics', 
-            'remoteConfig',
-            'performance',
-          ].filter(feature => typeof app[feature] === 'function');
-          loadEl.textContent = `Firebase SDK loaded with ${features.join(', ')}`;
-        } catch (e) {
-          console.error(e);
-          loadEl.textContent = 'Error loading the Firebase SDK, check the console.';
+    <section id="statusCard" class="status-card" aria-live="polite">
+      <h2 id="statusTitle">Lector en espera</h2>
+      <h3 id="personName"></h3>
+      <p id="personInfo">Active la cámara para iniciar.</p>
+      <p id="statusDetail"></p>
+      <button id="startButton" type="button">Activar cámara</button>
+    </section>
+  </main>
+
+  <footer>
+    <span id="clock"></span>
+    <span>Universidad Autónoma del Caribe</span>
+  </footer>
+
+  <script>
+    "use strict";
+
+    const video = document.getElementById("video");
+    const statusCard = document.getElementById("statusCard");
+    const statusTitle = document.getElementById("statusTitle");
+    const personName = document.getElementById("personName");
+    const personInfo = document.getElementById("personInfo");
+    const statusDetail = document.getElementById("statusDetail");
+    const startButton = document.getElementById("startButton");
+    const clock = document.getElementById("clock");
+
+    let detector = null;
+    let stream = null;
+    let scanning = false;
+    let processing = false;
+    let nextDetectionAt = 0;
+    let resetTimer = null;
+    let lastRawValue = "";
+    let lastRawAt = 0;
+
+    function setStatus(type, title, name = "", info = "", detail = "") {
+      statusCard.className = `status-card ${type}`.trim();
+      statusTitle.textContent = title;
+      personName.textContent = name;
+      personInfo.textContent = info;
+      statusDetail.textContent = detail;
+    }
+
+    function resetStatus() {
+      setStatus("", "Lector activo", "", "Esperando un código QR…", "");
+    }
+
+    function speakExpiredQr() {
+      if (!("speechSynthesis" in window)) return;
+
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(
+        "El código QR ya expiró."
+      );
+      utterance.lang = "es-CO";
+      utterance.rate = 0.92;
+      utterance.pitch = 1;
+      utterance.volume = 1;
+
+      const colombianVoice = window.speechSynthesis
+        .getVoices()
+        .find((voice) => voice.lang.toLowerCase() === "es-co");
+      if (colombianVoice) utterance.voice = colombianVoice;
+
+      window.speechSynthesis.speak(utterance);
+    }
+
+    async function submitToken(token) {
+      processing = true;
+      try {
+        const response = await fetch("/validar", {
+          method: "POST",
+          cache: "no-store",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token }),
+        });
+        const data = await response.json();
+
+        clearTimeout(resetTimer);
+        if (response.ok && data.ok) {
+          const person = data.persona;
+          const movement = data.tipo === "entrada"
+            ? "Entrada autorizada"
+            : "Salida registrada";
+          setStatus(
+            "valid",
+            data.mensaje,
+            person.nombre || `ID ${person.personaId}`,
+            [person.rol, person.carrera].filter(Boolean).join(" · "),
+            `${movement} · ${data.registradoColombia}`
+          );
+          resetTimer = setTimeout(resetStatus, 8000);
+        } else {
+          if (data.error === "TOKEN_EXPIRADO") {
+            speakExpiredQr();
+          }
+          setStatus(
+            "invalid",
+            data.error === "TOKEN_EXPIRADO"
+              ? "Código QR expirado"
+              : "Acceso no válido",
+            "",
+            data.mensaje || "No fue posible validar el código.",
+            ""
+          );
+          resetTimer = setTimeout(resetStatus, 4500);
         }
-      });
-    </script>
-  </body>
+      } catch {
+        setStatus(
+          "invalid",
+          "Sin conexión",
+          "",
+          "No fue posible comunicarse con el servidor.",
+          ""
+        );
+        resetTimer = setTimeout(resetStatus, 4500);
+      } finally {
+        processing = false;
+      }
+    }
+
+    async function detectionLoop(timestamp) {
+      if (!scanning) return;
+
+      if (!processing && video.readyState >= 2 && timestamp >= nextDetectionAt) {
+        nextDetectionAt = timestamp + 180;
+        try {
+          const codes = await detector.detect(video);
+          const rawValue = codes[0]?.rawValue?.trim();
+          const now = Date.now();
+          if (
+            rawValue &&
+            (rawValue !== lastRawValue || now - lastRawAt > 3000)
+          ) {
+            lastRawValue = rawValue;
+            lastRawAt = now;
+            await submitToken(rawValue);
+          }
+        } catch {
+          // Un cuadro borroso no es un error de acceso; se intenta el siguiente.
+        }
+      }
+
+      requestAnimationFrame(detectionLoop);
+    }
+
+    async function startCamera() {
+      if (!("BarcodeDetector" in window)) {
+        setStatus(
+          "invalid",
+          "Navegador no compatible",
+          "",
+          "Use una versión reciente de Chrome o Edge.",
+          ""
+        );
+        return;
+      }
+
+      startButton.disabled = true;
+      try {
+        const supported = await BarcodeDetector.getSupportedFormats();
+        if (!supported.includes("qr_code")) {
+          throw new Error("El navegador no soporta códigos QR.");
+        }
+
+        detector = new BarcodeDetector({ formats: ["qr_code"] });
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
+        });
+        video.srcObject = stream;
+        await video.play();
+        scanning = true;
+        startButton.hidden = true;
+        resetStatus();
+        requestAnimationFrame(detectionLoop);
+      } catch (error) {
+        setStatus(
+          "invalid",
+          "Cámara no disponible",
+          "",
+          error.message || "Revise los permisos de la cámara.",
+          ""
+        );
+        startButton.disabled = false;
+      }
+    }
+
+    function updateClock() {
+      clock.textContent = new Intl.DateTimeFormat("es-CO", {
+        dateStyle: "full",
+        timeStyle: "medium",
+        timeZone: "America/Bogota",
+      }).format(new Date());
+    }
+
+    startButton.addEventListener("click", startCamera);
+    window.addEventListener("beforeunload", () => {
+      scanning = false;
+      stream?.getTracks().forEach((track) => track.stop());
+    });
+
+    updateClock();
+    setInterval(updateClock, 1000);
+  </script>
+</body>
 </html>

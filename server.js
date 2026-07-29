@@ -1,251 +1,401 @@
+"use strict";
+
+const crypto = require("crypto");
 const express = require("express");
 const admin = require("firebase-admin");
 const path = require("path");
+const QRCode = require("qrcode");
 const twilio = require("twilio");
 
+const { fetchPersonName } = require("./epica");
+const { ROLES, inspectToken, issueToken } = require("./mipase");
+
+const VISITOR_DURATION_MS = 7 * 60 * 60 * 1000;
+
 const app = express();
-app.use(express.json());
+app.disable("x-powered-by");
+app.use(express.json({ limit: "16kb" }));
+app.use(express.static(path.join(__dirname, "public")));
 
+function requireServerConfiguration() {
+  if (!process.env.FIREBASE_CONFIG) {
+    throw new Error("FIREBASE_CONFIG no está configurada");
+  }
+  if (!process.env.MIPASE_SECRET || process.env.MIPASE_SECRET.length < 16) {
+    throw new Error(
+      "MIPASE_SECRET no está configurada o tiene menos de 16 caracteres"
+    );
+  }
+}
 
-app.use(express.static("public"));
+requireServerConfiguration();
 
-/* =========================
-    FIREBASE
-========================= */
 const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
-
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
-  databaseURL: "https://torniquete-universidad-default-rtdb.firebaseio.com"
+  databaseURL:
+    process.env.FIREBASE_DATABASE_URL ||
+    "https://torniquete-universidad-default-rtdb.firebaseio.com",
 });
 
 const db = admin.database();
+console.log("Firebase conectado");
 
-console.log(" Firebase conectado");
+function normalizePersonaId(value) {
+  const text = String(value ?? "").trim();
+  if (!/^\d+$/u.test(text)) {
+    return null;
+  }
+  const numericId = Number(text);
+  return Number.isSafeInteger(numericId) && numericId > 0
+    ? String(numericId)
+    : null;
+}
 
-/* =========================
-    TWILIO CONFIG
-========================= */
-const client = twilio(
-  process.env.TWILIO_SID,
-  process.env.TWILIO_TOKEN
-);
+function normalizeLabel(value) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .trim()
+    .toUpperCase();
+}
 
-const numeroTwilio = process.env.TWILIO_NUMERO;
+function roleCodeFor(user) {
+  const directCode = Number(user?.codigoRol);
+  if (Number.isInteger(directCode) && ROLES[directCode]) {
+    return directCode;
+  }
 
-/* =========================
-    FUNCIÓN ENVIAR SMS
-========================= */
-async function enviarSMS(cedula, telefono) {
+  const label = normalizeLabel(user?.rol || user?.tipo);
+  const mappings = {
+    ESTUDIANTE: 1,
+    DOCENTE: 2,
+    TRABAJADOR: 3,
+    ADMINISTRATIVO: 3,
+    EGRESADO: 4,
+    VISITANTE: 5,
+  };
+  return mappings[label] || 1;
+}
+
+function publicPerson(personaId, user, codigoRol, institutionalName = null) {
+  return {
+    personaId: Number(personaId),
+    nombre: institutionalName || String(user?.nombre ?? "").trim(),
+    carrera: String(user?.carrera ?? "").trim(),
+    tipo: String(user?.tipo ?? "").trim(),
+    codigoRol,
+    rol: ROLES[codigoRol],
+  };
+}
+
+function colombiaDateTime(date) {
+  return new Intl.DateTimeFormat("es-CO", {
+    timeZone: "America/Bogota",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(date);
+}
+
+function tokenFingerprint(token) {
+  return crypto.createHash("sha256").update(token, "utf8").digest("hex");
+}
+
+async function claimTokenOnce(token) {
+  const fingerprint = tokenFingerprint(token);
+  const usedTokenRef = db.ref(`qrUsados/${fingerprint}`);
+  const result = await usedTokenRef.transaction((currentValue) => {
+    if (currentValue !== null) {
+      return;
+    }
+    return Date.now();
+  });
+  return result.committed;
+}
+
+function isVisitor(user) {
+  return normalizeLabel(user?.tipo) === "VISITANTE";
+}
+
+async function ensureVisitorIsActive(ref, user) {
+  if (!isVisitor(user)) {
+    return true;
+  }
+
+  const now = Date.now();
+  const explicitExpiration = Number(user.expiracion);
+  if (Number.isFinite(explicitExpiration) && now > explicitExpiration) {
+    return false;
+  }
+
+  let startedAt = Number(user.inicio);
+  if (!Number.isFinite(startedAt) || startedAt <= 0) {
+    startedAt = now;
+    await ref.update({ inicio: startedAt });
+    user.inicio = startedAt;
+  }
+
+  return now - startedAt <= VISITOR_DURATION_MS;
+}
+
+function getTwilioClient() {
+  if (
+    !process.env.TWILIO_SID ||
+    !process.env.TWILIO_TOKEN ||
+    !process.env.TWILIO_NUMERO
+  ) {
+    return null;
+  }
+  return twilio(process.env.TWILIO_SID, process.env.TWILIO_TOKEN);
+}
+
+async function sendVisitorSms(personaId, phone) {
+  const client = getTwilioClient();
+  if (!client) {
+    console.warn("Twilio no configurado; SMS omitido");
+    return false;
+  }
+
+  const link =
+    `https://torniquete-system.onrender.com/qr.html?cedula=${personaId}`;
   try {
-
-    const link = `https://torniquete-system.onrender.com/qr.html?cedula=${cedula}`;
-
     await client.messages.create({
-      body: `UAC ACCESO
-
-Bienvenido a la Universidad Autónoma del Caribe
-
-Su acceso es válido por 7 horas
-
-Ingrese aquí:
-${link}`,
-      from: numeroTwilio,
-      to: "+57" + telefono
+      body:
+        "UAC ACCESO\n\n" +
+        "Bienvenido a la Universidad Autónoma del Caribe\n\n" +
+        "Su acceso es válido por 7 horas\n\n" +
+        `Ingrese aquí:\n${link}`,
+      from: process.env.TWILIO_NUMERO,
+      to: `+57${phone}`,
     });
-
-    console.log("📱 SMS enviado →", telefono);
-
+    console.log(`SMS enviado a ${phone}`);
+    return true;
   } catch (error) {
-    console.log(" Error enviando SMS:", error.message);
+    console.error("Error enviando SMS:", error.message);
+    return false;
   }
 }
 
-/* =========================
-    REGISTRAR DESDE PANEL
-========================= */
 app.post("/registrar", async (req, res) => {
   try {
-
-    const data = req.body;
-
-    if (!data.cedula) {
-      return res.json({ ok: false });
+    const personaId = normalizePersonaId(req.body?.cedula);
+    if (!personaId) {
+      return res.status(400).json({ ok: false, error: "CEDULA_INVALIDA" });
     }
 
-    //  guardar usuario
-    await db.ref("usuarios/" + data.cedula).set(data);
+    const data = { ...req.body, cedula: personaId };
+    await db.ref(`usuarios/${personaId}`).set(data);
 
-    //  enviar SMS si es visitante
-    if (data.tipo === "VISITANTE" && data.celular) {
-      await enviarSMS(data.cedula, data.celular);
+    if (isVisitor(data) && data.celular) {
+      await sendVisitorSms(personaId, data.celular);
     }
 
-    console.log(" Usuario registrado:", data.cedula);
-
-    res.json({ ok: true });
-
+    return res.json({ ok: true });
   } catch (error) {
-
-    console.log(" Error en registro:", error);
-    res.json({ ok: false });
-
+    console.error("Error en registro:", error.message);
+    return res.status(500).json({ ok: false, error: "ERROR_REGISTRO" });
   }
 });
 
-/* =========================
-    VALIDAR (Raspberry)
-========================= */
+// Genera el QR dentro del servidor. La clave y el algoritmo nunca se envían al
+// navegador ni forman parte de los archivos estáticos.
+app.post("/api/qr", async (req, res) => {
+  try {
+    const personaId = normalizePersonaId(
+      req.body?.cedula ?? req.body?.personaId
+    );
+    if (!personaId) {
+      return res.status(400).json({
+        ok: false,
+        error: "PERSONA_ID_INVALIDO",
+        mensaje: "Ingresa una identificación numérica válida.",
+      });
+    }
+
+    const ref = db.ref(`usuarios/${personaId}`);
+    const snapshot = await ref.once("value");
+    if (!snapshot.exists()) {
+      return res.status(404).json({
+        ok: false,
+        error: "USUARIO_NO_ENCONTRADO",
+        mensaje: "Usuario no encontrado.",
+      });
+    }
+
+    const user = snapshot.val();
+    if (!(await ensureVisitorIsActive(ref, user))) {
+      return res.status(403).json({
+        ok: false,
+        error: "VISITANTE_EXPIRADO",
+        mensaje: "El acceso del visitante ya expiró.",
+      });
+    }
+
+    const codigoRol = roleCodeFor(user);
+    const token = issueToken({ personaId, codigoRol });
+    const [qrDataUrl, institutionalName] = await Promise.all([
+      QRCode.toDataURL(token, {
+        errorCorrectionLevel: "M",
+        margin: 2,
+        width: 320,
+        color: {
+          dark: "#111111",
+          light: "#ffffff",
+        },
+      }),
+      fetchPersonName(personaId),
+    ]);
+
+    res.set("Cache-Control", "no-store");
+    return res.json({
+      ok: true,
+      qrDataUrl,
+      persona: publicPerson(
+        personaId,
+        user,
+        codigoRol,
+        institutionalName
+      ),
+      renuevaEnSegundos: 30,
+      vigenciaMaximaSegundos: 120,
+    });
+  } catch (error) {
+    console.error("Error al generar QR:", error.message);
+    return res.status(500).json({
+      ok: false,
+      error: "ERROR_GENERANDO_QR",
+      mensaje: "No fue posible generar el código QR.",
+    });
+  }
+});
+
+// Recibe exactamente el token leído por el escáner físico de la Raspberry.
 app.post("/validar", async (req, res) => {
   try {
+    const token = typeof req.body?.token === "string"
+      ? req.body.token.trim()
+      : "";
 
-    const { cedula, qr } = req.body;
-
-    if (!cedula) return res.json({ ok: false });
-
-    const ref = db.ref("usuarios/" + cedula);
-    const snap = await ref.once("value");
-
-    if (!snap.exists()) {
-      console.log(" Usuario no existe:", cedula);
-      return res.json({ ok: false });
+    // La búsqueda amplia permite identificar capturas vencidas y devolver el
+    // código específico que la Raspberry anuncia por voz.
+    const validation = inspectToken(token, { tolerance: 1440 });
+    if (!validation.ok) {
+      const expired = validation.reason === "EXPIRED";
+      return res.status(401).json({
+        ok: false,
+        error: expired ? "TOKEN_EXPIRADO" : "TOKEN_INVALIDO",
+        mensaje: expired
+          ? "El código QR ya expiró."
+          : "El código QR es inválido.",
+      });
     }
 
-    let user = snap.val();
+    const info = validation.info;
+    if (!(await claimTokenOnce(token))) {
+      return res.status(409).json({
+        ok: false,
+        error: "TOKEN_YA_UTILIZADO",
+        mensaje: "Este código QR ya fue utilizado.",
+      });
+    }
 
-// Solo validar QR si realmente viene QR
+    const personaId = String(info.personaId);
+    const ref = db.ref(`usuarios/${personaId}`);
+    const [snapshot, institutionalName] = await Promise.all([
+      ref.once("value"),
+      fetchPersonName(personaId),
+    ]);
 
-// ✅ VALIDACIÓN QR
-if (qr) {
+    if (!snapshot.exists()) {
+      return res.status(404).json({
+        ok: false,
+        error: "USUARIO_NO_ENCONTRADO",
+        mensaje: "La persona del QR no está registrada.",
+      });
+    }
 
-  console.log("================================");
-  console.log("CEDULA:", cedula);
-  console.log("QR:", qr);
-  console.log("ULTIMO QR:", user.ultimoQR);
+    const user = snapshot.val();
+    const storedRole = roleCodeFor(user);
+    if (storedRole !== info.codigoRol) {
+      return res.status(403).json({
+        ok: false,
+        error: "ROL_NO_COINCIDE",
+        mensaje: "El rol del QR no coincide con el registro institucional.",
+      });
+    }
 
-  // QR = 10 dígitos de cédula + timestamp
-  const tiempoQR = parseInt(
-    qr.substring(10)
-  );
+    if (!(await ensureVisitorIsActive(ref, user))) {
+      return res.status(403).json({
+        ok: false,
+        error: "VISITANTE_EXPIRADO",
+        mensaje: "El acceso del visitante ya expiró.",
+      });
+    }
 
-  console.log("TIEMPO QR:", tiempoQR);
-  console.log("AHORA:", Date.now());
-
-  const diferencia = Date.now() - tiempoQR;
-
-  console.log("DIFERENCIA:", diferencia);
-
-  if (diferencia > 30000) {
-
-    console.log(
-      "⛔ QR EXPIRADO:",
-      cedula
-    );
-
-    return res.json({
-      ok: false
-    });
-  }
-
-  if (user.ultimoQR === qr) {
-
-    console.log(
-      "⛔ QR YA UTILIZADO:",
-      cedula
-    );
-
-    return res.json({
-      ok: false
-    });
-  }
-
-}
-
-let tipoAcceso = "";
-
-// ✅ CONTROL VISITANTE (7H)
-if (user.tipo === "VISITANTE") {
-
-  const limite = 7 * 60 * 60 * 1000;
-
-  if (!user.inicio) {
+    const tipo = user.estado === "dentro" ? "salida" : "entrada";
+    const estado = tipo === "entrada" ? "dentro" : "fuera";
+    const registeredAt = new Date();
 
     await ref.update({
-      inicio: Date.now()
+      estado,
+      ultimoMovimiento: registeredAt.toISOString(),
+      ultimoMovimientoTipo: tipo,
+      ultimoQRHash: tokenFingerprint(token),
     });
 
-    user.inicio = Date.now();
-  }
-
-  if (Date.now() - user.inicio > limite) {
-
-    console.log(
-      "⛔ VISITANTE EXPIRADO:",
-      cedula
-    );
+    await db.ref("historial").push({
+      cedula: personaId,
+      personaId: Number(personaId),
+      nombre: institutionalName || user.nombre || "Usuario",
+      tipo,
+      fecha: registeredAt.toISOString(),
+      origen: "QR_MIPASE",
+    });
 
     return res.json({
-      ok: false
-    });
-  }
-
-}
-
-    //  ENTRADA / SALIDA
-    if (!user.estado || user.estado === "fuera") {
-
-      await ref.update({ estado: "dentro" });
-      tipoAcceso = "entrada";
-
-    } else {
-      
-      await ref.update({ estado: "fuera" });
-      tipoAcceso = "salida";
-    }
-
-    //  HISTORIAL
-    await db.ref("historial").push({
-      cedula: cedula,
-      nombre: user.nombre || "Usuario",
-      tipo: tipoAcceso,
-      fecha: new Date().toISOString()
-    });
-
-    console.log(" Acceso:", cedula, tipoAcceso);
-
-if (qr) {
-
-  await ref.update({
-    ultimoQR: qr
-  });
-
-}
-
-    res.json({
       ok: true,
-      tipo: tipoAcceso
+      tipo,
+      mensaje: tipo === "entrada"
+        ? "Bienvenido a la UAC"
+        : "Salida registrada",
+      persona: publicPerson(
+        personaId,
+        user,
+        storedRole,
+        institutionalName
+      ),
+      qr: {
+        emitido: info.emitido.toISOString(),
+        emitidoColombia: colombiaDateTime(info.emitido),
+        edadSegundos: Math.max(0, Math.floor(info.edadMs / 1000)),
+      },
+      registrado: registeredAt.toISOString(),
+      registradoColombia: colombiaDateTime(registeredAt),
     });
-
   } catch (error) {
-
-    console.log(" Error validación:", error);
-    res.json({ ok: false });
-
+    console.error("Error al validar QR:", error.message);
+    return res.status(500).json({
+      ok: false,
+      error: "ERROR_VALIDANDO_QR",
+      mensaje: "No fue posible validar el código QR.",
+    });
   }
 });
 
-/* =========================
-    RUTA PRINCIPAL
-========================= */
-app.get("/", (req, res) => {
-  res.send(" Sistema activo");
+app.get("/health", (req, res) => {
+  res.json({ ok: true });
 });
 
-/* =========================
-    SERVIDOR
-========================= */
-const PORT = process.env.PORT || 3000;
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
 
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(" Servidor activo en puerto", PORT);
+  console.log(`Servidor web activo en puerto ${PORT}`);
 });

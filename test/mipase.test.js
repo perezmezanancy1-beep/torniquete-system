@@ -1,0 +1,124 @@
+"use strict";
+
+const assert = require("node:assert/strict");
+const test = require("node:test");
+
+process.env.MIPASE_SECRET = "clave-exclusiva-para-pruebas-automatizadas";
+
+const {
+  MAX_TOKEN_AGE_MS,
+  inspectToken,
+  issueToken,
+  validateToken,
+} = require("../mipase");
+
+const NOW = Date.UTC(2026, 6, 29, 15, 0, 0);
+const PYTHON_REFERENCE_TOKEN = "lVrR55sJNvgq0ymvueB6F0UUwI2MMmEpa88";
+
+test("es compatible byte a byte con el algoritmo Python original", () => {
+  const token = issueToken({
+    personaId: 123456789,
+    codigoRol: 2,
+    now: 1785334800000,
+  });
+
+  assert.equal(token, PYTHON_REFERENCE_TOKEN);
+});
+
+test("emite y valida un token reciente con los datos de la persona", () => {
+  const token = issueToken({
+    personaId: 123456789,
+    codigoRol: 2,
+    now: NOW - 30_000,
+  });
+
+  const result = validateToken(token, { now: NOW });
+
+  assert.equal(result.personaId, 123456789);
+  assert.equal(result.codigoRol, 2);
+  assert.equal(result.rol, "DOCENTE");
+  assert.equal(result.emitidoMs, NOW - 30_000);
+});
+
+test("acepta token Base64 URL con padding opcional del lector", () => {
+  const token = issueToken({
+    personaId: 139573,
+    codigoRol: 1,
+    now: NOW,
+  });
+  const padded = token + "=".repeat((4 - (token.length % 4)) % 4);
+
+  assert.equal(validateToken(padded, { now: NOW }).personaId, 139573);
+});
+
+test("permite emitir pases temporales para visitantes registrados", () => {
+  const token = issueToken({
+    personaId: 139573,
+    codigoRol: 5,
+    now: NOW,
+  });
+
+  const result = validateToken(token, { now: NOW });
+  assert.equal(result.rol, "VISITANTE");
+});
+
+test("acepta un token justo antes de cumplir dos minutos", () => {
+  const token = issueToken({
+    personaId: 123456789,
+    codigoRol: 1,
+    now: NOW - MAX_TOKEN_AGE_MS + 1,
+  });
+
+  assert.ok(validateToken(token, { now: NOW }));
+});
+
+test("rechaza un token con más de dos minutos", () => {
+  const token = issueToken({
+    personaId: 123456789,
+    codigoRol: 1,
+    now: NOW - MAX_TOKEN_AGE_MS - 1,
+  });
+
+  const result = inspectToken(token, { now: NOW, tolerance: 5 });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, "EXPIRED");
+  assert.equal(validateToken(token, { now: NOW, tolerance: 5 }), null);
+});
+
+test("rechaza tokens futuros más allá del margen de reloj", () => {
+  const token = issueToken({
+    personaId: 123456789,
+    codigoRol: 1,
+    now: NOW + 16_000,
+  });
+
+  assert.equal(validateToken(token, { now: NOW }), null);
+});
+
+test("rechaza tokens alterados, texto libre y roles desconocidos", () => {
+  const token = issueToken({
+    personaId: 123456789,
+    codigoRol: 4,
+    now: NOW,
+  });
+  const replacement = token.endsWith("A") ? "B" : "A";
+
+  assert.equal(validateToken(token.slice(0, -1) + replacement, { now: NOW }), null);
+  assert.equal(validateToken("123456789", { now: NOW }), null);
+  assert.throws(
+    () => issueToken({ personaId: 123456789, codigoRol: 99, now: NOW }),
+    /no válido/u
+  );
+});
+
+test("no funciona si el servidor no tiene configurado MIPASE_SECRET", () => {
+  const original = process.env.MIPASE_SECRET;
+  delete process.env.MIPASE_SECRET;
+
+  assert.throws(
+    () => issueToken({ personaId: 1, codigoRol: 1, now: NOW }),
+    /MIPASE_SECRET/u
+  );
+
+  process.env.MIPASE_SECRET = original;
+});

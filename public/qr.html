@@ -1,285 +1,272 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MiPase UAC</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --uac-red: #c4112a;
+      --uac-red-dark: #960c20;
+      --uac-gold: #f4c400;
+      --text: #1b2430;
+      --muted: #667085;
+      --surface: #ffffff;
+    }
 
-<!--  Firebase -->
-<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    * { box-sizing: border-box; }
 
-<!--  QR -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    body {
+      min-height: 100vh;
+      margin: 0;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      font-family: "Segoe UI", Arial, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 20% 10%, rgba(244,196,0,.20), transparent 28%),
+        linear-gradient(145deg, var(--uac-red-dark), var(--uac-red));
+    }
 
-<style>
-body{
-    margin:0;
+    .card {
+      width: min(420px, 100%);
+      padding: 30px;
+      border-top: 6px solid var(--uac-gold);
+      border-radius: 24px;
+      background: var(--surface);
+      box-shadow: 0 24px 60px rgba(43, 0, 8, .30);
+      text-align: center;
+    }
 
-    display:flex;
-    justify-content:center;
-    align-items:center;
-    height:100vh;
-    background:linear-gradient(135deg,#2c3e50,#d90429);
-    font-family:Arial;
-}
+    .logo {
+      width: 82px;
+      height: 82px;
+      object-fit: contain;
+    }
 
-.card{
-    background:white;
-    padding:25px;
-    border-radius:20px;
-    width:320px;
-    text-align:center;
+    h1 {
+      margin: 10px 0 4px;
+      color: var(--uac-red-dark);
+      font-size: 1.5rem;
+    }
 
-    display:flex;
-    flex-direction:column;
-    align-items:center;
-}
+    .subtitle, .person-role, #timer, #message {
+      color: var(--muted);
+    }
 
-.logo{
-    width:80px;
-    margin-bottom:10px;
-}
+    .form {
+      margin-top: 24px;
+    }
 
-#qr{
-    display:flex;
-    justify-content:center;
-    align-items:center;
-    width:100%;
-    margin:20px 0;
-}
+    input, button {
+      width: 100%;
+      min-height: 48px;
+      border-radius: 12px;
+      font: inherit;
+    }
 
-#qr canvas{
-    margin:auto !important;
+    input {
+      padding: 0 14px;
+      border: 1px solid #d0d5dd;
+      outline: none;
+    }
 
-}
+    input:focus {
+      border-color: var(--uac-red);
+      box-shadow: 0 0 0 4px rgba(196,17,42,.12);
+    }
 
-#nombre{
+    button {
+      margin-top: 12px;
+      border: 0;
+      color: white;
+      background: var(--uac-red);
+      font-weight: 700;
+      cursor: pointer;
+    }
 
-    font-weight:bold;
-}
+    button:disabled {
+      cursor: wait;
+      opacity: .65;
+    }
 
-#tipo{
-    margin-top:5px;
-    font-weight:bold;
+    #qrView[hidden] { display: none; }
 
-}
+    .person-name {
+      margin: 18px 0 2px;
+      font-size: 1.3rem;
+    }
 
-#estado{
-    margin-top:10px;
+    .person-role {
+      margin: 0 0 14px;
+      font-weight: 600;
+    }
 
-}
+    .qr-shell {
+      display: grid;
+      place-items: center;
+      min-height: 332px;
+      padding: 6px;
+      border: 2px solid #eceff3;
+      border-radius: 18px;
+      background: white;
+    }
 
-#timer{
-    color:red;
-    font-weight:bold;
-}
-</style>
+    #qrImage {
+      display: block;
+      width: min(320px, 100%);
+      aspect-ratio: 1;
+    }
 
+    #timer {
+      margin: 12px 0 0;
+      font-weight: 700;
+    }
+
+    #message {
+      min-height: 22px;
+      margin: 12px 0 0;
+    }
+
+    #message.error { color: #b42318; }
+  </style>
 </head>
-
 <body>
+  <main class="card">
+    <img src="img/logo1.png" class="logo" alt="Universidad Autónoma del Caribe">
+    <h1>MiPase UAC</h1>
+    <p class="subtitle">Código dinámico de acceso institucional</p>
 
-<div class="card">
+    <section id="loginBox" class="form">
+      <label for="cedulaInput" class="subtitle">Identificación</label>
+      <input id="cedulaInput" inputmode="numeric" autocomplete="off"
+             placeholder="Ingresa tu número" aria-describedby="message">
+      <button id="loginButton" type="button">Generar mi código QR</button>
+    </section>
 
+    <section id="qrView" hidden>
+      <h2 id="nombre" class="person-name"></h2>
+      <p id="personaInfo" class="person-role"></p>
+      <div class="qr-shell">
+        <img id="qrImage" alt="Código QR temporal de MiPase">
+      </div>
+      <p id="timer" aria-live="polite"></p>
+    </section>
 
-<img src="img/logo1.png" class="logo">
+    <p id="message" role="status" aria-live="polite"></p>
+  </main>
 
-<h3>Universidad Autónoma del Caribe</h3>
+  <script>
+    "use strict";
 
+    const loginBox = document.getElementById("loginBox");
+    const loginButton = document.getElementById("loginButton");
+    const cedulaInput = document.getElementById("cedulaInput");
+    const qrView = document.getElementById("qrView");
+    const qrImage = document.getElementById("qrImage");
+    const nombre = document.getElementById("nombre");
+    const personaInfo = document.getElementById("personaInfo");
+    const timer = document.getElementById("timer");
+    const message = document.getElementById("message");
 
-<div id="loginBox">
-<input id="cedulaInput" placeholder="Cédula"><br><br>
-<button onclick="login()">Ingresar</button>
-</div>
+    let cedula = "";
+    let secondsRemaining = 30;
+    let refreshTimer = null;
+    let countdownTimer = null;
+    let requestInProgress = false;
 
+    function showMessage(text, isError = false) {
+      message.textContent = text;
+      message.classList.toggle("error", isError);
+    }
 
-<div id="qrView" style="display:none">
+    async function requestQr({ initial = false } = {}) {
+      if (requestInProgress) return;
+      requestInProgress = true;
+      loginButton.disabled = true;
 
-<h3 id="nombre"></h3>
-<p id="carrera"></p>
+      try {
+        const response = await fetch("/api/qr", {
+          method: "POST",
+          cache: "no-store",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cedula }),
+        });
+        const data = await response.json();
 
-<p id="tipo"></p>
-<p id="estado"></p>
+        if (!response.ok || !data.ok) {
+          throw new Error(data.mensaje || "No fue posible generar el código QR.");
+        }
 
-<div id="qr"></div>
+        qrImage.src = data.qrDataUrl;
+        nombre.textContent = data.persona.nombre || `ID ${data.persona.personaId}`;
+        personaInfo.textContent = [
+          data.persona.rol,
+          data.persona.carrera,
+        ].filter(Boolean).join(" · ");
 
-<p id="timer"></p>
+        loginBox.hidden = true;
+        qrView.hidden = false;
+        secondsRemaining = data.renuevaEnSegundos || 30;
+        timer.textContent = `El código se renueva en ${secondsRemaining} segundos`;
+        showMessage(initial ? "Código generado correctamente." : "Código renovado.");
+      } catch (error) {
+        showMessage(error.message, true);
+        if (initial) {
+          loginBox.hidden = false;
+          qrView.hidden = true;
+        }
+      } finally {
+        requestInProgress = false;
+        loginButton.disabled = false;
+      }
+    }
 
-</div>
+    function startTimers() {
+      clearInterval(refreshTimer);
+      clearInterval(countdownTimer);
 
-</div>
+      countdownTimer = setInterval(() => {
+        secondsRemaining = Math.max(0, secondsRemaining - 1);
+        timer.textContent = `El código se renueva en ${secondsRemaining} segundos`;
+      }, 1000);
 
-<!--  AUDIO CORRECTO -->
-<audio id="beep" preload="auto">
-  <source src="sounds/beep.mp3" type="audio/mpeg">
-</audio>
+      refreshTimer = setInterval(() => requestQr(), 30_000);
+    }
 
-<script>
-
-
-
-firebase.initializeApp({
- databaseURL:"https://torniquete-universidad-default-rtdb.firebaseio.com"
-});
-
-const db = firebase.database();
-
-let usuario;
-let cedula;
-let inicioQR = 0;
-let audioActivo = false;
-
-//  FUNCIÓN SONIDO (PRO)
-function reproducirBeep(){
-    const audio = document.getElementById("beep");
-    audio.pause();
-    audio.currentTime = 0;
-
-    audio.play().catch(()=>{
-        console.log("🔇 Navegador bloqueó sonido");
-    });
-}
-
-//  LOGIN
-function login(){
-
-    cedula = document.getElementById("cedulaInput").value.trim();
-
-    if(!cedula){
-        alert("Ingrese cédula");
+    async function login() {
+      const candidate = cedulaInput.value.trim();
+      if (!/^\d+$/.test(candidate)) {
+        showMessage("Ingresa una identificación numérica válida.", true);
+        cedulaInput.focus();
         return;
+      }
+
+      cedula = candidate;
+      showMessage("Generando código seguro…");
+      await requestQr({ initial: true });
+      if (!qrView.hidden) startTimers();
     }
 
-    //  DESBLOQUEAR AUDIO
-    document.body.addEventListener("click", () => {
-        if(!audioActivo){
-            reproducirBeep();
-            audioActivo = true;
-        }
-    }, {once:true});
-
-    db.ref("usuarios/"+cedula).once("value")
-    .then(s=>{
-
-        if(!s.exists()){
-            alert(" Usuario no encontrado");
-            return;
-        }
-
-        usuario = s.val();
-
-        //  VALIDACIÓN VISITANTE
-        if(usuario.tipo === "VISITANTE"){
-
-            let ahora = Date.now();
-            let limite = 7 * 60 * 60 * 1000;
-
-            if(!usuario.inicio){
-                db.ref("usuarios/"+cedula).update({inicio: ahora});
-                usuario.inicio = ahora;
-            }
-
-            if(ahora - usuario.inicio > limite){
-                alert("⛔ Visitante expirado (7h)");
-                return;
-            }
-        }
-
-        mostrar();
-    });
-}
-
-//  MOSTRAR
-function mostrar(){
-
-    document.getElementById("loginBox").style.display="none";
-    document.getElementById("qrView").style.display="block";
-
-    document.getElementById("nombre").innerText = usuario.nombre || "";
-    document.getElementById("carrera").innerText = usuario.carrera || "";
-
-
-    document.getElementById("tipo").innerText =
-        "👤 " + (usuario.tipo || "USUARIO");
-
-
-    if(usuario.tipo === "VISITANTE"){
-        document.getElementById("estado").innerHTML =
-        "<span style='color:orange'>⏳ Visitante activo</span>";
-    } else {
-        document.getElementById("estado").innerHTML =
-        "<span style='color:green'> Acceso permanente</span>";
-    }
-
-    generarQR();
-}
-
-//  GENERAR QR
-function generarQR(){
-
-    inicioQR = Date.now();
-
-
-    
-    //const data = cedula + inicioQR;
-
-    const cedulaQR = cedula.padStart(10, "0");
-
-const data = cedulaQR + inicioQR;
-    
-    document.getElementById("qr").innerHTML="";
-
-    new QRCode(document.getElementById("qr"),{
-        text:data,
-        width:200,
-        height:200
+    loginButton.addEventListener("click", login);
+    cedulaInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") login();
     });
 
-    //  SONIDO
-    if(audioActivo){
-        reproducirBeep();
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden && cedula && !qrView.hidden) {
+        requestQr();
+      }
+    });
+
+    const cedulaFromLink = new URLSearchParams(window.location.search)
+      .get("cedula");
+    if (cedulaFromLink && /^\d+$/.test(cedulaFromLink)) {
+      cedulaInput.value = cedulaFromLink;
+      login();
     }
-}
-
-// TIMER
-setInterval(()=>{
-
-    if(!usuario) return;
-    
-
-    let restante = 30000 - (Date.now() - inicioQR);
-
-    if(restante <= 0){
-        generarQR();
-        restante = 30000;
-    }
-
-    document.getElementById("timer").innerText =
-        "⏳ Nuevo QR en: " + Math.floor(restante/1000) + "s";
-
-    //  VISITANTE TIEMPO
-    if(usuario.tipo === "VISITANTE" && usuario.inicio){
-
-        let total = 7 * 60 * 60 * 1000;
-        let restanteVisita = total - (Date.now() - usuario.inicio);
-
-        if(restanteVisita <= 0){
-            document.getElementById("estado").innerHTML =
-            "<span style='color:red'>⛔ Expirado</span>";
-            return;
-        }
-
-        let horas = Math.floor(restanteVisita / (1000*60*60));
-        let minutos = Math.floor((restanteVisita % (1000*60*60))/(1000*60));
-
-        document.getElementById("estado").innerHTML =
-        `⏳ Visitante: ${horas}h ${minutos}m restantes`;
-    }
-
-},1000);
-
-</script>
-
+  </script>
 </body>
 </html>
-
-

@@ -1,0 +1,18 @@
+[Unit]
+Description=Torniquete UAC (QR, huellas, voz y relés)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=pirb
+Group=pirb
+SupplementaryGroups=input dialout gpio audio
+WorkingDirectory=/home/pirb
+ExecStart=/usr/bin/python3 /home/pirb/torniquete.py
+Restart=always
+RestartSec=3
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
