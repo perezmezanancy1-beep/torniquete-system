@@ -16,7 +16,7 @@ const {
 } = require("./mipase");
 
 const VISITOR_DURATION_MS = 7 * 60 * 60 * 1000;
-const MOVEMENT_COOLDOWN_MS = 45_000;
+const MOVEMENT_COOLDOWN_MS = 10_000;
 
 const app = express();
 app.disable("x-powered-by");
