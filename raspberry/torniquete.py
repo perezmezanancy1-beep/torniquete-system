@@ -57,6 +57,7 @@ QR_DEDUP_SECONDS = 3
 FINGERPRINT_ENROLL_TIMEOUT_SECONDS = 35
 FINGERPRINT_SECURITY_LEVEL = 1
 FINGERPRINT_MATCH_MIN_SCORE = 30
+FINGERPRINT_LOW_MATCH_MIN_SCORE = 10
 FINGERPRINT_STABLE_PRESENT_READS = 2
 FINGERPRINT_STABLE_ABSENT_READS = 2
 FINGERPRINT_ENROLL_CAPTURE_ATTEMPTS = 3
@@ -478,13 +479,40 @@ def fingerprint_field(direction):
     )
 
 
+def fingerprint_list_field(direction):
+    return (
+        "huellas_entrada_ids"
+        if direction == "entrada"
+        else "huellas_salida_ids"
+    )
+
+
+def fingerprint_positions(user, direction):
+    positions = []
+    plural = user.get(fingerprint_list_field(direction))
+    if isinstance(plural, list):
+        positions.extend(plural)
+    primary = user.get(fingerprint_field(direction))
+    if primary is not None:
+        positions.append(primary)
+    legacy = user.get("huella_id")
+    if legacy is not None:
+        positions.append(legacy)
+
+    unique = []
+    for position in positions:
+        try:
+            normalized = int(position)
+        except (TypeError, ValueError):
+            continue
+        if normalized not in unique:
+            unique.append(normalized)
+    return unique
+
+
 def find_person_by_fingerprint(fingerprint_id, direction):
-    field = fingerprint_field(direction)
     for person_id, user in fetch_users().items():
-        assigned_id = user.get(field)
-        if assigned_id is None:
-            assigned_id = user.get("huella_id")
-        if str(assigned_id) == str(fingerprint_id):
+        if int(fingerprint_id) in fingerprint_positions(user, direction):
             return str(person_id), user
     return None, None
 
@@ -676,18 +704,18 @@ def complete_pending_fingerprint_sync():
         )
         user_response.raise_for_status()
         user = user_response.json() or {}
-        exit_position = user.get("huella_salida_id")
-        if exit_position is not None:
+        exit_positions = fingerprint_positions(user, "salida")
+        if exit_positions and not command.get("forzarSincronizacion"):
             update_fingerprint_command(
                 command_id,
                 estado="completado",
                 mensaje="Huella sincronizada con el lector de salida.",
-                huellaId=int(exit_position),
+                huellaId=int(exit_positions[-1]),
             )
             return
 
-        entry_position = user.get("huella_entrada_id")
-        if entry_position is None:
+        entry_positions = fingerprint_positions(user, "entrada")
+        if not entry_positions:
             update_fingerprint_command(
                 command_id,
                 estado="error",
@@ -701,25 +729,32 @@ def complete_pending_fingerprint_sync():
             f"SINCRONIZANDO HUELLA persona={person_id} hacia salida",
             flush=True,
         )
-        exit_position = copy_entry_template_to_exit(entry_position)
+        copied_positions = []
         try:
+            for entry_position in entry_positions[-2:]:
+                copied_positions.append(
+                    copy_entry_template_to_exit(entry_position)
+                )
             assign_fingerprint_to_person(
                 person_id,
                 "salida",
-                exit_position,
+                copied_positions,
             )
         except Exception:
-            delete_exit_template(exit_position)
+            for copied_position in copied_positions:
+                delete_exit_template(copied_position)
             raise
 
         update_fingerprint_command(
             command_id,
             estado="completado",
             mensaje="Huella registrada en entrada y salida.",
-            huellaId=int(exit_position),
+            huellaId=int(copied_positions[-1]),
+            huellaIds=copied_positions,
         )
         print(
-            f"HUELLA SINCRONIZADA persona={person_id} salida={exit_position}",
+            "HUELLA SINCRONIZADA "
+            f"persona={person_id} salidas={copied_positions}",
             flush=True,
         )
         enqueue_voice("Huella registrada correctamente")
@@ -912,22 +947,37 @@ def request_finger_removal(sensor, command_id):
 
 def assign_fingerprint_to_person(person_id, direction, position):
     field = fingerprint_field(direction)
+    list_field = fingerprint_list_field(direction)
+    requested_positions = (
+        position if isinstance(position, (list, tuple)) else [position]
+    )
+    requested_positions = list(dict.fromkeys(
+        int(item) for item in requested_positions
+    ))
     users = fetch_users(force=True)
     for existing_person_id, user in users.items():
-        assigned_id = user.get(field)
-        if assigned_id is None:
-            assigned_id = user.get("huella_id")
+        assigned_positions = fingerprint_positions(user, direction)
         if (
-            str(assigned_id) == str(position)
+            set(assigned_positions).intersection(requested_positions)
             and str(existing_person_id) != str(person_id)
         ):
             raise RuntimeError(
                 "La huella ya pertenece a otra persona en este lector"
             )
 
+    current_user = users.get(str(person_id)) or {}
+    positions = fingerprint_positions(current_user, direction)
+    for requested_position in requested_positions:
+        if requested_position not in positions:
+            positions.append(requested_position)
+    positions = positions[-3:]
+
     response = http.patch(
         f"{URL_FIREBASE}/{person_id}.json",
-        json={field: int(position)},
+        json={
+            field: int(requested_positions[-1]),
+            list_field: positions,
+        },
         timeout=REQUEST_TIMEOUT,
     )
     response.raise_for_status()
@@ -961,11 +1011,6 @@ def store_captured_fingerprint(sensor, person_id, direction):
             charBufferNumber=0x01,
         )
 
-    assign_fingerprint_to_person(
-        person_id,
-        direction,
-        position,
-    )
     print(
         "HUELLA PLANTILLA "
         f"persona={person_id} id={position} "
@@ -1044,29 +1089,115 @@ def enroll_fingerprint(sensor, command, direction):
                 "y coloque el dedo completamente centrado."
             )
 
-        if direction == "entrada":
-            user = fetch_person(person_id)
-            if user.get("huella_salida_id") is None:
-                if not update_fingerprint_command(
+        captured_positions = [int(position)]
+        verified = False
+        for verify_attempt in range(
+            1,
+            FINGERPRINT_ENROLL_CAPTURE_ATTEMPTS + 1,
+        ):
+            request_finger_removal(sensor, command_id)
+            enqueue_voice("Coloque el mismo dedo una vez más")
+            try:
+                capture_fingerprint_sample(
+                    sensor,
+                    0x01,
                     command_id,
-                    estado="sincronizando",
-                    lector="salida",
-                    mensaje=(
-                        "Huella capturada. Sincronizando el lector de salida."
+                    (
+                        "Coloque el mismo dedo una vez más para comprobar "
+                        "el registro."
                     ),
-                    huellaId=int(position),
-                ):
-                    raise RuntimeError(
-                        "La huella se guardó, pero no se pudo iniciar "
-                        "la sincronización de salida."
-                    )
+                )
+            except Exception as capture_error:
                 print(
-                    "REINICIO PARA SINCRONIZAR HUELLA "
-                    f"persona={person_id}",
+                    "HUELLA VERIFICACION DESCARTADA "
+                    f"persona={person_id} intento={verify_attempt} "
+                    f"motivo={capture_error}",
                     flush=True,
                 )
-                stop_event.set()
-                return
+                if verify_attempt >= FINGERPRINT_ENROLL_CAPTURE_ATTEMPTS:
+                    raise RuntimeError(
+                        "No se obtuvo una segunda imagen clara."
+                    ) from capture_error
+                continue
+
+            found_position, accuracy = sensor.searchTemplate()
+            print(
+                "HUELLA VERIFICACION "
+                f"persona={person_id} encontrada={found_position} "
+                f"precision={accuracy}",
+                flush=True,
+            )
+            if (
+                found_position in captured_positions
+                and accuracy >= FINGERPRINT_LOW_MATCH_MIN_SCORE
+            ):
+                verified = True
+                break
+
+            owner_id, _owner = (
+                find_person_by_fingerprint(found_position, direction)
+                if found_position >= 0
+                else (None, None)
+            )
+            if (
+                owner_id == person_id
+                and accuracy >= FINGERPRINT_LOW_MATCH_MIN_SCORE
+            ):
+                captured_positions.append(int(found_position))
+                verified = True
+                break
+            if (
+                owner_id
+                and owner_id != person_id
+                and accuracy >= FINGERPRINT_ENROLL_DUPLICATE_MIN_SCORE
+            ):
+                raise RuntimeError(
+                    "La huella ya pertenece a otra persona en este lector"
+                )
+
+            alternate_position = store_captured_fingerprint(
+                sensor,
+                person_id,
+                direction,
+            )
+            if alternate_position not in captured_positions:
+                captured_positions.append(alternate_position)
+            verified = True
+            break
+
+        if not verified:
+            raise RuntimeError("No se pudo comprobar la huella registrada.")
+
+        assign_fingerprint_to_person(
+            person_id,
+            direction,
+            captured_positions,
+        )
+        position = captured_positions[-1]
+
+        if direction == "entrada":
+            if not update_fingerprint_command(
+                command_id,
+                estado="sincronizando",
+                lector="salida",
+                forzarSincronizacion=True,
+                mensaje=(
+                    "Huella comprobada. Sincronizando el lector de salida."
+                ),
+                huellaId=int(position),
+                huellaIds=captured_positions,
+            ):
+                raise RuntimeError(
+                    "La huella se guardó, pero no se pudo iniciar "
+                    "la sincronización de salida."
+                )
+            print(
+                "REINICIO PARA SINCRONIZAR HUELLA "
+                f"persona={person_id}",
+                flush=True,
+            )
+            stop_event.set()
+            return
 
         update_fingerprint_command(
             command_id,
@@ -1120,10 +1251,42 @@ def fingerprint_worker(path, name, direction):
 
                 sensor.convertImage(0x01)
                 position, accuracy = sensor.searchTemplate()
+                accepted = (
+                    position >= 0
+                    and accuracy >= FINGERPRINT_MATCH_MIN_SCORE
+                )
                 if (
-                    position >= 0 and
-                    accuracy >= FINGERPRINT_MATCH_MIN_SCORE
+                    not accepted
+                    and position >= 0
+                    and accuracy >= FINGERPRINT_LOW_MATCH_MIN_SCORE
                 ):
+                    first_position = position
+                    stop_event.wait(0.18)
+                    if wait_for_finger(
+                        sensor,
+                        True,
+                        timeout_seconds=1.2,
+                        stable_reads=1,
+                    ):
+                        sensor.convertImage(0x01)
+                        second_position, second_accuracy = (
+                            sensor.searchTemplate()
+                        )
+                        print(
+                            f"HUELLA CONFIRMACION {direction.upper()} "
+                            f"primera={first_position}:{accuracy} "
+                            f"segunda={second_position}:{second_accuracy}",
+                            flush=True,
+                        )
+                        accepted = (
+                            second_position == first_position
+                            and second_accuracy >=
+                            FINGERPRINT_LOW_MATCH_MIN_SCORE
+                        )
+                        if accepted:
+                            accuracy = max(accuracy, second_accuracy)
+
+                if accepted:
                     print(
                         f"HUELLA {direction.upper()} "
                         f"id={position} precision={accuracy}",
@@ -1138,6 +1301,13 @@ def fingerprint_worker(path, name, direction):
                     else:
                         enqueue_voice("Huella no registrada")
                     stop_event.wait(2)
+                else:
+                    print(
+                        f"HUELLA SIN COINCIDENCIA {direction.upper()} "
+                        f"id={position} precision={accuracy}",
+                        flush=True,
+                    )
+                    stop_event.wait(0.4)
         except Exception as error:
             print(f"Reiniciando {name}: {error}", flush=True)
             stop_event.wait(1)

@@ -81,6 +81,7 @@ class FakeSensor:
 class FakeEnrollmentSensor:
     def __init__(self):
         self.events = []
+        self.positions = iter([6, 7])
 
     def searchTemplate(self):
         self.events.append("search")
@@ -88,7 +89,7 @@ class FakeEnrollmentSensor:
 
     def storeTemplate(self, positionNumber=-1, charBufferNumber=0x01):
         self.events.append("store")
-        return 6
+        return next(self.positions)
 
 
 class FingerprintFlowTests(unittest.TestCase):
@@ -167,7 +168,7 @@ class FingerprintFlowTests(unittest.TestCase):
             self.module.enroll_fingerprint(
                 sensor,
                 {"id": "command-1", "personaId": 123},
-                "entrada",
+                "salida",
             )
         finally:
             (
@@ -180,9 +181,12 @@ class FingerprintFlowTests(unittest.TestCase):
                 self.module.wait_for_finger,
             ) = original_functions
 
-        self.assertEqual(len(capture_attempts), 3)
-        self.assertEqual(sensor.events, ["search", "store"])
-        self.assertEqual(assigned, [("123", "entrada", 6)])
+        self.assertEqual(len(capture_attempts), 4)
+        self.assertEqual(
+            sensor.events,
+            ["search", "store", "search", "search", "store"],
+        )
+        self.assertEqual(assigned, [("123", "salida", [6, 7])])
 
 if __name__ == "__main__":
     unittest.main()
