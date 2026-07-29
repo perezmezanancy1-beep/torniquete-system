@@ -3,6 +3,7 @@
 
 import os
 import fcntl
+import gc
 import hashlib
 import queue
 import signal
@@ -40,13 +41,16 @@ QR_DEVICE = (
     "/dev/input/by-id/"
     "usb-BF_SCAN_SCAN_KEYBOARD_A-00000-event-kbd"
 )
+FINGERPRINT_ENTRY_DEVICE = "/dev/serial0"
+FINGERPRINT_EXIT_DEVICE = "/dev/ttyUSB0"
 
 RELE_ENTRADA = 17
 RELE_SALIDA = 27
 AUDIO_DEVICE = "hw:2,0"
 AUDIO_CARD = "2"
 AUDIO_MIXER_LEVEL = "95%"
-PIPER_MODEL = "/home/pirb/voices/es_MX-ald-medium.onnx"
+PIPER_MODEL = "/home/pirb/voices/es_MX-claude-high.onnx"
+PIPER_FALLBACK_MODEL = "/home/pirb/voices/es_MX-ald-medium.onnx"
 VOICE_CACHE_DIR = "/home/pirb/.torniquete_voice_cache"
 REQUEST_TIMEOUT = (4, 35)
 QR_DEDUP_SECONDS = 3
@@ -76,6 +80,7 @@ users_cache_lock = threading.Lock()
 fingerprint_commands_seen = set()
 fingerprint_commands_lock = threading.Lock()
 instance_lock_file = None
+active_voice_model = None
 
 
 def acquire_instance_lock():
@@ -180,20 +185,36 @@ def enqueue_voice(text):
 
 
 def load_neural_voice():
-    if PiperVoice is None or not os.path.isfile(PIPER_MODEL):
+    global active_voice_model
+    if PiperVoice is None:
         print("Voz neuronal no disponible; usando voz de respaldo", flush=True)
         return None
-    try:
-        voice = PiperVoice.load(PIPER_MODEL, use_cuda=False)
-        print("Voz neuronal en español lista", flush=True)
-        return voice
-    except Exception as error:
-        print(f"No fue posible cargar la voz neuronal: {error}", flush=True)
-        return None
+    for model_path in (PIPER_MODEL, PIPER_FALLBACK_MODEL):
+        if not os.path.isfile(model_path):
+            continue
+        try:
+            voice = PiperVoice.load(model_path, use_cuda=False)
+            active_voice_model = model_path
+            print(
+                "Voz neuronal en español lista: "
+                f"{os.path.basename(model_path)}",
+                flush=True,
+            )
+            return voice
+        except Exception as error:
+            print(
+                "No fue posible cargar "
+                f"{os.path.basename(model_path)}: {error}",
+                flush=True,
+            )
+    print("Voz neuronal no disponible; usando voz de respaldo", flush=True)
+    active_voice_model = "espeak-ng"
+    return None
 
 
 def voice_cache_path(text):
-    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    cache_key = f"{active_voice_model or PIPER_MODEL}\0{text}"
+    digest = hashlib.sha256(cache_key.encode("utf-8")).hexdigest()
     return os.path.join(VOICE_CACHE_DIR, f"{digest}.wav")
 
 
@@ -201,7 +222,7 @@ def synthesize_voice(text, audio_path, neural_voice):
     if neural_voice is not None:
         synthesis_config = SynthesisConfig(
             volume=1.15,
-            length_scale=0.9,
+            length_scale=0.98,
             noise_scale=0.667,
             noise_w_scale=0.8,
             normalize_audio=True,
@@ -437,6 +458,18 @@ def fetch_users(force=False):
             return users_cache["data"]
 
 
+def fetch_person(person_id):
+    response = http.get(
+        f"{URL_FIREBASE}/{person_id}.json",
+        timeout=REQUEST_TIMEOUT,
+    )
+    response.raise_for_status()
+    user = response.json() or {}
+    if not isinstance(user, dict):
+        raise ValueError("Respuesta de usuario inválida")
+    return user
+
+
 def fingerprint_field(direction):
     return (
         "huella_entrada_id"
@@ -496,25 +529,214 @@ def process_fingerprint(person_id, user, direction):
 def initialize_fingerprint_sensor(path, name):
     while not stop_event.is_set():
         try:
-            sensor = PyFingerprint(
-                path,
-                57600,
-                0xFFFFFFFF,
-                0x00000000,
+            sensor = connect_fingerprint_sensor(path)
+            print(
+                f"{name} listo en {path} "
+                f"sensibilidad={FINGERPRINT_SECURITY_LEVEL}",
+                flush=True,
             )
-            if sensor.verifyPassword():
-                if sensor.getSecurityLevel() != FINGERPRINT_SECURITY_LEVEL:
-                    sensor.setSecurityLevel(FINGERPRINT_SECURITY_LEVEL)
-                print(
-                    f"{name} listo en {path} "
-                    f"sensibilidad={FINGERPRINT_SECURITY_LEVEL}",
-                    flush=True,
-                )
-                return sensor
+            return sensor
         except Exception as error:
             print(f"Reintentando {name}: {error}", flush=True)
         stop_event.wait(2)
     return None
+
+
+def connect_fingerprint_sensor(path):
+    sensor = PyFingerprint(
+        path,
+        57600,
+        0xFFFFFFFF,
+        0x00000000,
+    )
+    if not sensor.verifyPassword():
+        raise RuntimeError(f"Contraseña inválida para el sensor {path}")
+    if sensor.getSecurityLevel() != FINGERPRINT_SECURITY_LEVEL:
+        sensor.setSecurityLevel(FINGERPRINT_SECURITY_LEVEL)
+    return sensor
+
+
+def close_fingerprint_sensor(sensor):
+    if sensor is None:
+        return
+    try:
+        serial_port = getattr(sensor, "_PyFingerprint__serial", None)
+        if serial_port is not None and serial_port.isOpen():
+            serial_port.close()
+    except Exception:
+        pass
+
+
+def copy_entry_template_to_exit(entry_position):
+    """Copia una plantilla entre sensores sin sacarla de la Raspberry."""
+    entry_sensor = None
+    exit_sensor = None
+    stored_position = None
+    try:
+        entry_sensor = connect_fingerprint_sensor(FINGERPRINT_ENTRY_DEVICE)
+        if not entry_sensor.loadTemplate(int(entry_position), 0x01):
+            raise RuntimeError("No se pudo cargar la huella de entrada")
+        characteristics = entry_sensor.downloadCharacteristics(0x01)
+        source_digest = hashlib.sha256(bytes(characteristics)).digest()
+        close_fingerprint_sensor(entry_sensor)
+        entry_sensor = None
+        gc.collect()
+        time.sleep(0.25)
+
+        exit_sensor = connect_fingerprint_sensor(FINGERPRINT_EXIT_DEVICE)
+        try:
+            exit_sensor.uploadCharacteristics(0x01, characteristics)
+        except Exception:
+            # Algunos firmwares USB envían la plantilla correctamente pero
+            # fallan al responder la verificación interna de la biblioteca.
+            pass
+        close_fingerprint_sensor(exit_sensor)
+        exit_sensor = None
+        gc.collect()
+        time.sleep(0.45)
+
+        exit_sensor = connect_fingerprint_sensor(FINGERPRINT_EXIT_DEVICE)
+        recovered = exit_sensor.downloadCharacteristics(0x01)
+        if hashlib.sha256(bytes(recovered)).digest() != source_digest:
+            raise RuntimeError(
+                "El lector de salida no confirmó la plantilla transferida"
+            )
+
+        stored_position = exit_sensor.storeTemplate(
+            positionNumber=-1,
+            charBufferNumber=0x01,
+        )
+        if not exit_sensor.loadTemplate(stored_position, 0x01):
+            raise RuntimeError("No se pudo verificar la huella de salida")
+        stored = exit_sensor.downloadCharacteristics(0x01)
+        if hashlib.sha256(bytes(stored)).digest() != source_digest:
+            raise RuntimeError(
+                "La huella guardada en salida no coincide con la original"
+            )
+        return int(stored_position)
+    except Exception:
+        if stored_position is not None and exit_sensor is not None:
+            try:
+                exit_sensor.deleteTemplate(stored_position)
+            except Exception:
+                pass
+        raise
+    finally:
+        close_fingerprint_sensor(entry_sensor)
+        close_fingerprint_sensor(exit_sensor)
+        gc.collect()
+
+
+def delete_exit_template(position):
+    sensor = None
+    try:
+        sensor = connect_fingerprint_sensor(FINGERPRINT_EXIT_DEVICE)
+        sensor.deleteTemplate(int(position))
+    except Exception as error:
+        print(
+            f"No se pudo retirar la plantilla de salida {position}: {error}",
+            flush=True,
+        )
+    finally:
+        close_fingerprint_sensor(sensor)
+        gc.collect()
+
+
+def complete_pending_fingerprint_sync():
+    """Completa una sincronización pendiente antes de abrir los lectores."""
+    try:
+        response = http.get(
+            f"{URL_FINGERPRINT_CONTROL}.json",
+            timeout=REQUEST_TIMEOUT,
+        )
+        response.raise_for_status()
+        command = response.json() or {}
+        if (
+            command.get("estado") != "sincronizando"
+            or str(command.get("lector") or "").lower() != "salida"
+        ):
+            return
+
+        command_id = str(command.get("id") or "")
+        person_id = str(command.get("personaId") or "")
+        expiration = int(command.get("expiraEpochMs") or 0)
+        if not command_id or not person_id.isdigit():
+            return
+        if expiration and int(time.time() * 1000) > expiration:
+            update_fingerprint_command(
+                command_id,
+                estado="error",
+                mensaje="La solicitud de sincronización expiró.",
+            )
+            return
+
+        user_response = http.get(
+            f"{URL_FIREBASE}/{person_id}.json",
+            timeout=REQUEST_TIMEOUT,
+        )
+        user_response.raise_for_status()
+        user = user_response.json() or {}
+        exit_position = user.get("huella_salida_id")
+        if exit_position is not None:
+            update_fingerprint_command(
+                command_id,
+                estado="completado",
+                mensaje="Huella sincronizada con el lector de salida.",
+                huellaId=int(exit_position),
+            )
+            return
+
+        entry_position = user.get("huella_entrada_id")
+        if entry_position is None:
+            update_fingerprint_command(
+                command_id,
+                estado="error",
+                mensaje=(
+                    "Registre primero la huella en el lector de entrada."
+                ),
+            )
+            return
+
+        print(
+            f"SINCRONIZANDO HUELLA persona={person_id} hacia salida",
+            flush=True,
+        )
+        exit_position = copy_entry_template_to_exit(entry_position)
+        try:
+            assign_fingerprint_to_person(
+                person_id,
+                "salida",
+                exit_position,
+            )
+        except Exception:
+            delete_exit_template(exit_position)
+            raise
+
+        update_fingerprint_command(
+            command_id,
+            estado="completado",
+            mensaje="Huella registrada en entrada y salida.",
+            huellaId=int(exit_position),
+        )
+        print(
+            f"HUELLA SINCRONIZADA persona={person_id} salida={exit_position}",
+            flush=True,
+        )
+        enqueue_voice("Huella registrada correctamente")
+    except (requests.RequestException, ValueError) as error:
+        print(f"No fue posible consultar la sincronización: {error}", flush=True)
+    except Exception as error:
+        command_id = locals().get("command_id", "")
+        print(f"ERROR SINCRONIZANDO HUELLA: {error}", flush=True)
+        if command_id:
+            update_fingerprint_command(
+                command_id,
+                estado="error",
+                mensaje=(
+                    "No fue posible sincronizar el lector de salida. "
+                    "Intente nuevamente."
+                ),
+            )
 
 
 def update_fingerprint_command(command_id, **values):
@@ -567,6 +789,51 @@ def fingerprint_command_worker():
                     )
                     stop_event.wait(0.75)
                     continue
+                if direction == "salida":
+                    person_id = str(command.get("personaId") or "")
+                    user = fetch_person(person_id)
+                    exit_position = user.get("huella_salida_id")
+                    entry_position = user.get("huella_entrada_id")
+                    if exit_position is not None:
+                        update_fingerprint_command(
+                            command_id,
+                            estado="completado",
+                            mensaje=(
+                                "La huella ya está disponible en el "
+                                "lector de salida."
+                            ),
+                            huellaId=int(exit_position),
+                        )
+                        stop_event.wait(0.75)
+                        continue
+                    if entry_position is None:
+                        update_fingerprint_command(
+                            command_id,
+                            estado="error",
+                            mensaje=(
+                                "Registre primero la huella en el lector "
+                                "de entrada; luego se sincronizará con salida."
+                            ),
+                        )
+                        enqueue_voice(
+                            "Registre primero la huella en el lector de entrada"
+                        )
+                        stop_event.wait(0.75)
+                        continue
+                    if update_fingerprint_command(
+                        command_id,
+                        estado="sincronizando",
+                        mensaje=(
+                            "Sincronizando la huella con el lector de salida."
+                        ),
+                    ):
+                        print(
+                            "REINICIO PARA SINCRONIZAR HUELLA "
+                            f"persona={person_id}",
+                            flush=True,
+                        )
+                        stop_event.set()
+                        return
                 with fingerprint_commands_lock:
                     if command_id in fingerprint_commands_seen:
                         stop_event.wait(0.5)
@@ -668,69 +935,6 @@ def assign_fingerprint_to_person(person_id, direction, position):
         users_cache["expires_at"] = 0
 
 
-def enroll_exit_fingerprint_by_search(
-    sensor,
-    person_id,
-    direction,
-    command_id,
-):
-    """Valida dos muestras usando el buscador del firmware USB de salida."""
-    temporary_position = sensor.storeTemplate(
-        positionNumber=-1,
-        charBufferNumber=0x01,
-    )
-    keep_template = False
-    try:
-        request_finger_removal(sensor, command_id)
-        second_prompt = "Coloque de nuevo el mismo dedo."
-        enqueue_voice(second_prompt)
-        capture_fingerprint_sample(
-            sensor,
-            0x01,
-            command_id,
-            second_prompt,
-        )
-        found_position, accuracy = sensor.searchTemplate()
-        print(
-            "HUELLA VALIDACION SALIDA "
-            f"persona={person_id} temporal={temporary_position} "
-            f"encontrada={found_position} puntuacion={accuracy}",
-            flush=True,
-        )
-        if found_position != temporary_position:
-            if found_position >= 0:
-                owner_id, _owner = find_person_by_fingerprint(
-                    found_position,
-                    direction,
-                )
-                if owner_id and owner_id != str(person_id):
-                    raise RuntimeError(
-                        "La huella ya pertenece a otra persona"
-                    )
-            raise RuntimeError(
-                "Las dos muestras no coincidieron. "
-                "Coloque el mismo dedo cubriendo el sensor."
-            )
-
-        assign_fingerprint_to_person(
-            person_id,
-            direction,
-            temporary_position,
-        )
-        keep_template = True
-        return temporary_position
-    finally:
-        if not keep_template:
-            try:
-                sensor.deleteTemplate(temporary_position)
-            except Exception as cleanup_error:
-                print(
-                    "No se pudo eliminar la huella temporal "
-                    f"id={temporary_position}: {cleanup_error}",
-                    flush=True,
-                )
-
-
 def enroll_fingerprint(sensor, command, direction):
     command_id = str(command.get("id") or "")
     person_id = str(command.get("personaId") or "")
@@ -765,15 +969,6 @@ def enroll_fingerprint(sensor, command, direction):
                     existing_position,
                 )
                 position = existing_position
-                break
-
-            if direction == "salida":
-                position = enroll_exit_fingerprint_by_search(
-                    sensor,
-                    person_id,
-                    direction,
-                    command_id,
-                )
                 break
 
             for second_attempt in range(
@@ -847,6 +1042,30 @@ def enroll_fingerprint(sensor, command, direction):
                 "No se logró una lectura estable. Limpie el sensor "
                 "y coloque el dedo completamente centrado."
             )
+
+        if direction == "entrada":
+            user = fetch_person(person_id)
+            if user.get("huella_salida_id") is None:
+                if not update_fingerprint_command(
+                    command_id,
+                    estado="sincronizando",
+                    lector="salida",
+                    mensaje=(
+                        "Huella capturada. Sincronizando el lector de salida."
+                    ),
+                    huellaId=int(position),
+                ):
+                    raise RuntimeError(
+                        "La huella se guardó, pero no se pudo iniciar "
+                        "la sincronización de salida."
+                    )
+                print(
+                    "REINICIO PARA SINCRONIZAR HUELLA "
+                    f"persona={person_id}",
+                    flush=True,
+                )
+                stop_event.set()
+                return
 
         update_fingerprint_command(
             command_id,
@@ -935,6 +1154,7 @@ def main():
     configure_audio()
     signal.signal(signal.SIGTERM, request_shutdown)
     signal.signal(signal.SIGINT, request_shutdown)
+    complete_pending_fingerprint_sync()
 
     workers = [
         threading.Thread(target=voice_worker, name="voice", daemon=True),
@@ -956,13 +1176,21 @@ def main():
         threading.Thread(target=qr_reader_worker, name="qr-reader", daemon=True),
         threading.Thread(
             target=fingerprint_worker,
-            args=("/dev/serial0", "Sensor Entrada", "entrada"),
+            args=(
+                FINGERPRINT_ENTRY_DEVICE,
+                "Sensor Entrada",
+                "entrada",
+            ),
             name="fingerprint-entry",
             daemon=True,
         ),
         threading.Thread(
             target=fingerprint_worker,
-            args=("/dev/ttyUSB0", "Sensor Salida", "salida"),
+            args=(
+                FINGERPRINT_EXIT_DEVICE,
+                "Sensor Salida",
+                "salida",
+            ),
             name="fingerprint-exit",
             daemon=True,
         ),

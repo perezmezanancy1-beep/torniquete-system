@@ -492,7 +492,7 @@
           <div>
             <p class="eyebrow">Biometría</p>
             <h2>Registrar una huella</h2>
-            <p class="muted">Elige la persona y el lector físico que vas a habilitar.</p>
+            <p class="muted">Registra dos muestras rápidas en entrada y sincroniza la misma huella con salida.</p>
           </div>
         </div>
         <div class="card-body">
@@ -522,8 +522,8 @@
             <label class="reader-option">
               <input type="radio" name="reader" value="salida">
               <span class="reader-icon">☝️</span>
-              <strong>Lector de salida</strong>
-              <span>Sensor conectado a /dev/ttyUSB0</span>
+              <strong>Sincronizar lector de salida</strong>
+              <span>Usa la huella ya registrada en entrada</span>
             </label>
           </div>
 
@@ -541,8 +541,9 @@
 
           <ol class="instruction">
             <li>Haz clic en habilitar y espera el aviso de voz.</li>
-            <li>Coloca el mismo dedo dos veces cuando el lector lo solicite.</li>
-            <li>Al finalizar escucharás la confirmación y verás el resultado aquí.</li>
+            <li>Para una huella nueva, selecciona entrada y coloca el mismo dedo dos veces.</li>
+            <li>La Raspberry copiará localmente el patrón al lector de salida.</li>
+            <li>Si la entrada ya está registrada, puedes sincronizar salida directamente.</li>
           </ol>
         </div>
       </section>
@@ -815,6 +816,18 @@
         setStatus("error", "Falta información", "Selecciona una persona y un lector.");
         return;
       }
+      if (
+        reader === "salida" &&
+        user.huella_entrada_id === undefined &&
+        user.huella_salida_id === undefined
+      ) {
+        setStatus(
+          "error",
+          "Falta la huella de entrada",
+          "Registra primero dos muestras en entrada; después podrás sincronizar salida."
+        );
+        return;
+      }
 
       const button = byId("activateFingerprint");
       button.disabled = true;
@@ -874,7 +887,11 @@
         } else {
           setStatus(
             "pending",
-            command.estado === "procesando" ? "Leyendo la huella" : "Lector habilitado",
+            command.estado === "procesando"
+              ? "Leyendo la huella"
+              : command.estado === "sincronizando"
+                ? "Sincronizando lectores"
+                : "Lector habilitado",
             command.mensaje || "Sigue las instrucciones de voz."
           );
         }

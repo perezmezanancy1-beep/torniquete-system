@@ -78,23 +78,6 @@ class FakeSensor:
         return next(self.readings)
 
 
-class FakeExitSensor:
-    def __init__(self, search_result):
-        self.search_result = search_result
-        self.deleted = []
-
-    def storeTemplate(self, positionNumber=-1, charBufferNumber=0x01):
-        self.stored_buffer = charBufferNumber
-        return 7
-
-    def searchTemplate(self):
-        return self.search_result
-
-    def deleteTemplate(self, position):
-        self.deleted.append(position)
-        return True
-
-
 class FingerprintFlowTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -126,63 +109,17 @@ class FingerprintFlowTests(unittest.TestCase):
         self.assertTrue(result)
         self.assertEqual(sensor.calls, 8)
 
-    def test_exit_reader_validates_second_sample_with_internal_search(self):
-        sensor = FakeExitSensor((7, 42))
-        original_functions = (
-            self.module.request_finger_removal,
-            self.module.capture_fingerprint_sample,
-            self.module.assign_fingerprint_to_person,
-            self.module.enqueue_voice,
-        )
-        self.module.request_finger_removal = lambda *_args: None
-        self.module.capture_fingerprint_sample = lambda *_args: None
-        self.module.assign_fingerprint_to_person = lambda *_args: None
-        self.module.enqueue_voice = lambda *_args: None
+    def test_voice_cache_changes_when_the_local_model_changes(self):
+        original_model = self.module.active_voice_model
         try:
-            position = self.module.enroll_exit_fingerprint_by_search(
-                sensor,
-                "176723",
-                "salida",
-                "command-1",
-            )
+            self.module.active_voice_model = "/voices/old.onnx"
+            old_path = self.module.voice_cache_path("Bienvenido")
+            self.module.active_voice_model = "/voices/new.onnx"
+            new_path = self.module.voice_cache_path("Bienvenido")
         finally:
-            (
-                self.module.request_finger_removal,
-                self.module.capture_fingerprint_sample,
-                self.module.assign_fingerprint_to_person,
-                self.module.enqueue_voice,
-            ) = original_functions
+            self.module.active_voice_model = original_model
 
-        self.assertEqual(position, 7)
-        self.assertEqual(sensor.stored_buffer, 0x01)
-        self.assertEqual(sensor.deleted, [])
-
-    def test_exit_reader_removes_temporary_template_on_mismatch(self):
-        sensor = FakeExitSensor((-1, -1))
-        original_functions = (
-            self.module.request_finger_removal,
-            self.module.capture_fingerprint_sample,
-            self.module.enqueue_voice,
-        )
-        self.module.request_finger_removal = lambda *_args: None
-        self.module.capture_fingerprint_sample = lambda *_args: None
-        self.module.enqueue_voice = lambda *_args: None
-        try:
-            with self.assertRaisesRegex(RuntimeError, "no coincidieron"):
-                self.module.enroll_exit_fingerprint_by_search(
-                    sensor,
-                    "176723",
-                    "salida",
-                    "command-2",
-                )
-        finally:
-            (
-                self.module.request_finger_removal,
-                self.module.capture_fingerprint_sample,
-                self.module.enqueue_voice,
-            ) = original_functions
-
-        self.assertEqual(sensor.deleted, [7])
+        self.assertNotEqual(old_path, new_path)
 
 if __name__ == "__main__":
     unittest.main()

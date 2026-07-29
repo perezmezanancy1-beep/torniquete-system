@@ -558,6 +558,18 @@ app.post("/api/huellas/registrar", async (req, res) => {
     }
 
     const user = userSnapshot.val();
+    if (
+      lector === "salida" &&
+      user?.huella_entrada_id === undefined &&
+      user?.huella_salida_id === undefined
+    ) {
+      return res.status(409).json({
+        ok: false,
+        error: "HUELLA_ENTRADA_REQUERIDA",
+        mensaje:
+          "Registre primero la huella en entrada; después se sincronizará con salida.",
+      });
+    }
     const now = Date.now();
     const command = {
       id: crypto.randomUUID(),
@@ -577,7 +589,11 @@ app.post("/api/huellas/registrar", async (req, res) => {
       const currentState = String(current?.estado ?? "");
       const expiration = new Date(current?.expira ?? 0).getTime();
       const currentIsActive =
-        (currentState === "pendiente" || currentState === "procesando") &&
+        (
+          currentState === "pendiente" ||
+          currentState === "procesando" ||
+          currentState === "sincronizando"
+        ) &&
         Number.isFinite(expiration) &&
         expiration > now;
       return currentIsActive ? undefined : command;
