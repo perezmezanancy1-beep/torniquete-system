@@ -51,10 +51,12 @@ VOICE_CACHE_DIR = "/home/pirb/.torniquete_voice_cache"
 REQUEST_TIMEOUT = (4, 35)
 QR_DEDUP_SECONDS = 3
 FINGERPRINT_ENROLL_TIMEOUT_SECONDS = 35
-FINGERPRINT_STABLE_PRESENT_READS = 3
-FINGERPRINT_STABLE_ABSENT_READS = 5
-FINGERPRINT_CAPTURE_ROUNDS = 2
-FINGERPRINT_SECOND_SAMPLE_ATTEMPTS = 2
+FINGERPRINT_SECURITY_LEVEL = 1
+FINGERPRINT_MATCH_MIN_SCORE = 30
+FINGERPRINT_STABLE_PRESENT_READS = 2
+FINGERPRINT_STABLE_ABSENT_READS = 2
+FINGERPRINT_CAPTURE_ROUNDS = 1
+FINGERPRINT_SECOND_SAMPLE_ATTEMPTS = 1
 LOG_FULL_QR = os.environ.get("TORNIQUETE_LOG_FULL_QR") == "1"
 
 stop_event = threading.Event()
@@ -501,7 +503,13 @@ def initialize_fingerprint_sensor(path, name):
                 0x00000000,
             )
             if sensor.verifyPassword():
-                print(f"{name} listo en {path}", flush=True)
+                if sensor.getSecurityLevel() != FINGERPRINT_SECURITY_LEVEL:
+                    sensor.setSecurityLevel(FINGERPRINT_SECURITY_LEVEL)
+                print(
+                    f"{name} listo en {path} "
+                    f"sensibilidad={FINGERPRINT_SECURITY_LEVEL}",
+                    flush=True,
+                )
                 return sensor
         except Exception as error:
             print(f"Reintentando {name}: {error}", flush=True)
@@ -606,19 +614,6 @@ def wait_for_finger(
     return False
 
 
-def is_fingerprint_quality_error(error):
-    message = str(error).lower()
-    return any(
-        fragment in message
-        for fragment in (
-            "too messy",
-            "too few feature",
-            "few feature",
-            "image is invalid",
-        )
-    )
-
-
 def capture_fingerprint_sample(
     sensor,
     buffer_number,
@@ -626,30 +621,14 @@ def capture_fingerprint_sample(
     prompt,
     timeout_seconds=FINGERPRINT_ENROLL_TIMEOUT_SECONDS,
 ):
-    for capture_attempt in range(2):
-        update_fingerprint_command(
-            command_id,
-            estado="procesando",
-            mensaje=prompt,
-        )
-        if not wait_for_finger(sensor, True, timeout_seconds):
-            raise TimeoutError("Tiempo agotado esperando el dedo")
-        try:
-            sensor.convertImage(buffer_number)
-            return
-        except Exception as error:
-            if not is_fingerprint_quality_error(error) or capture_attempt == 1:
-                raise
-            update_fingerprint_command(
-                command_id,
-                estado="procesando",
-                mensaje="No se leyó bien. Retire y coloque el dedo centrado.",
-            )
-            enqueue_voice(
-                "No se leyó bien. Retire y coloque el dedo centrado"
-            )
-            if not wait_for_finger(sensor, False, 12):
-                raise TimeoutError("No se retiró el dedo")
+    update_fingerprint_command(
+        command_id,
+        estado="procesando",
+        mensaje=prompt,
+    )
+    if not wait_for_finger(sensor, True, timeout_seconds):
+        raise TimeoutError("Tiempo agotado esperando el dedo")
+    sensor.convertImage(buffer_number)
 
 
 def request_finger_removal(sensor, command_id):
@@ -661,7 +640,7 @@ def request_finger_removal(sensor, command_id):
     enqueue_voice("Retire el dedo")
     if not wait_for_finger(sensor, False, 15):
         raise TimeoutError("No se retiró completamente el dedo")
-    stop_event.wait(0.2)
+    stop_event.wait(0.1)
 
 
 def assign_fingerprint_to_person(person_id, direction, position):
@@ -696,9 +675,7 @@ def enroll_fingerprint(sensor, command, direction):
     if not command_id or not person_id.isdigit():
         return
 
-    enqueue_voice(
-        f"Lector de {reader_label} habilitado. Coloque el dedo"
-    )
+    enqueue_voice("Coloque el dedo")
 
     try:
         position = None
@@ -733,7 +710,7 @@ def enroll_fingerprint(sensor, command, direction):
             ):
                 request_finger_removal(sensor, command_id)
                 second_prompt = (
-                    "Coloque nuevamente el mismo dedo, centrado y sin moverlo."
+                    "Coloque de nuevo el mismo dedo."
                     if second_attempt == 1
                     else "Ajuste ligeramente el dedo y colóquelo otra vez."
                 )
@@ -851,7 +828,10 @@ def fingerprint_worker(path, name, direction):
 
                 sensor.convertImage(0x01)
                 position, accuracy = sensor.searchTemplate()
-                if position >= 0 and accuracy > 50:
+                if (
+                    position >= 0 and
+                    accuracy >= FINGERPRINT_MATCH_MIN_SCORE
+                ):
                     print(
                         f"HUELLA {direction.upper()} "
                         f"id={position} precision={accuracy}",

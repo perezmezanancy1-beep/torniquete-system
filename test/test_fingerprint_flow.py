@@ -109,18 +109,5 @@ class FingerprintFlowTests(unittest.TestCase):
         self.assertTrue(result)
         self.assertEqual(sensor.calls, 8)
 
-    def test_identifies_recoverable_image_quality_errors(self):
-        self.assertTrue(
-            self.module.is_fingerprint_quality_error(
-                RuntimeError("The image contains too few feature points")
-            )
-        )
-        self.assertFalse(
-            self.module.is_fingerprint_quality_error(
-                RuntimeError("Communication error")
-            )
-        )
-
-
 if __name__ == "__main__":
     unittest.main()
