@@ -321,10 +321,10 @@ app.post("/validar", async (req, res) => {
 
     const personaId = String(info.personaId);
     const ref = db.ref(`usuarios/${personaId}`);
-    const [snapshot, institutionalName] = await Promise.all([
-      ref.once("value"),
-      fetchPersonName(personaId),
-    ]);
+    const snapshot = await ref.once("value");
+    let institutionalName = snapshot.exists()
+      ? String(snapshot.val()?.nombre ?? "").trim() || null
+      : await fetchPersonName(personaId);
 
     let user;
     if (!snapshot.exists()) {
