@@ -87,6 +87,17 @@ class FakeEnrollmentSensor:
         self.events.append("search")
         return (-1, 0)
 
+    def convertImage(self, buffer_number):
+        self.events.append(f"convert:{buffer_number}")
+
+    def compareCharacteristics(self):
+        self.events.append("compare")
+        return 18
+
+    def createTemplate(self):
+        self.events.append("create")
+        return True
+
     def storeTemplate(self, positionNumber=-1, charBufferNumber=0x01):
         self.events.append("store")
         return next(self.positions)
@@ -196,7 +207,19 @@ class FingerprintFlowTests(unittest.TestCase):
         self.assertEqual(len(capture_attempts), 4)
         self.assertEqual(
             sensor.events,
-            ["search", "store", "search", "search", "store"],
+            [
+                "convert:2",
+                "compare",
+                "create",
+                "search",
+                "store",
+                "search",
+                "convert:2",
+                "compare",
+                "create",
+                "search",
+                "store",
+            ],
         )
         self.assertEqual(assigned, [("123", "salida", [6, 7])])
 

@@ -78,6 +78,7 @@ users_cache = {"expires_at": 0.0, "data": {}}
 users_cache_lock = threading.Lock()
 fingerprint_commands_seen = set()
 fingerprint_commands_lock = threading.Lock()
+fingerprint_no_match_last = {"entrada": 0.0, "salida": 0.0}
 instance_lock_file = None
 active_voice_model = None
 
@@ -1144,7 +1145,17 @@ def assign_fingerprint_to_person(person_id, direction, position):
         users_cache["expires_at"] = 0
 
 
-def store_captured_fingerprint(sensor, person_id, direction):
+def build_and_store_fingerprint_model(sensor, person_id, direction):
+    # Usa la misma imagen clara para llenar ambos buffers y obliga al
+    # firmware a formar un modelo buscable antes de escribirlo en flash.
+    sensor.convertImage(0x02)
+    comparison_score = sensor.compareCharacteristics()
+    if comparison_score <= 0 or not sensor.createTemplate():
+        raise RuntimeError(
+            "El sensor no pudo formar una plantilla válida. "
+            "Mantenga el dedo completamente quieto."
+        )
+
     existing_position, accuracy = sensor.searchTemplate()
     is_duplicate = (
         existing_position >= 0
@@ -1171,9 +1182,10 @@ def store_captured_fingerprint(sensor, person_id, direction):
         )
 
     print(
-        "HUELLA PLANTILLA "
+        "HUELLA MODELO "
         f"persona={person_id} id={position} "
-        f"duplicada={is_duplicate} precision={accuracy}",
+        f"duplicada={is_duplicate} precision={accuracy} "
+        f"comparacion={comparison_score}",
         flush=True,
     )
     return int(position)
@@ -1207,6 +1219,11 @@ def enroll_fingerprint(sensor, command, direction):
                     command_id,
                     prompt,
                 )
+                position = build_and_store_fingerprint_model(
+                    sensor,
+                    person_id,
+                    direction,
+                )
             except Exception as capture_error:
                 print(
                     "HUELLA CAPTURA DESCARTADA "
@@ -1229,11 +1246,6 @@ def enroll_fingerprint(sensor, command, direction):
                 )
                 continue
 
-            position = store_captured_fingerprint(
-                sensor,
-                person_id,
-                direction,
-            )
             print(
                 "HUELLA CAPTURA ACEPTADA "
                 f"persona={person_id} intento={attempt}",
@@ -1314,11 +1326,24 @@ def enroll_fingerprint(sensor, command, direction):
                     "La huella ya pertenece a otra persona en este lector"
                 )
 
-            alternate_position = store_captured_fingerprint(
-                sensor,
-                person_id,
-                direction,
-            )
+            try:
+                alternate_position = build_and_store_fingerprint_model(
+                    sensor,
+                    person_id,
+                    direction,
+                )
+            except Exception as model_error:
+                print(
+                    "HUELLA MODELO ALTERNO DESCARTADO "
+                    f"persona={person_id} intento={verify_attempt} "
+                    f"motivo={model_error}",
+                    flush=True,
+                )
+                if verify_attempt >= FINGERPRINT_ENROLL_CAPTURE_ATTEMPTS:
+                    raise RuntimeError(
+                        "No se pudo formar una plantilla verificable."
+                    ) from model_error
+                continue
             if alternate_position not in captured_positions:
                 captured_positions.append(alternate_position)
             verified = True
@@ -1466,6 +1491,10 @@ def fingerprint_worker(path, name, direction):
                         f"id={position} precision={accuracy}",
                         flush=True,
                     )
+                    now = time.monotonic()
+                    if now - fingerprint_no_match_last[direction] >= 5:
+                        fingerprint_no_match_last[direction] = now
+                        enqueue_voice("Huella no reconocida")
                     stop_event.wait(0.4)
         except Exception as error:
             print(f"Reiniciando {name}: {error}", flush=True)
