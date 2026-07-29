@@ -326,15 +326,31 @@ app.post("/validar", async (req, res) => {
       fetchPersonName(personaId),
     ]);
 
+    let user;
     if (!snapshot.exists()) {
-      return res.status(404).json({
-        ok: false,
-        error: "USUARIO_NO_ENCONTRADO",
-        mensaje: "La persona del QR no está registrada.",
-      });
+      if (!institutionalName) {
+        return res.status(404).json({
+          ok: false,
+          error: "USUARIO_NO_ENCONTRADO",
+          mensaje: "La persona del QR no está registrada en Épica.",
+        });
+      }
+
+      user = {
+        nombre: institutionalName,
+        tipo: info.rol,
+        rol: info.rol,
+        codigoRol: info.codigoRol,
+        estado: "fuera",
+        origen: "MIPASE",
+        creado: new Date().toISOString(),
+      };
+      await ref.set(user);
+      console.log(`Usuario Mi Pase registrado automáticamente: ${personaId}`);
+    } else {
+      user = snapshot.val();
     }
 
-    const user = snapshot.val();
     const storedRole = roleCodeFor(user);
     if (storedRole !== info.codigoRol) {
       return res.status(403).json({

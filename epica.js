@@ -2,7 +2,7 @@
 
 const EPICA_NAME_URL =
   "https://epica.uac.edu.co/ServiciosWeb/ServiciosEpica.asmx/NombrePersona";
-const DEFAULT_TIMEOUT_MS = 5_000;
+const DEFAULT_TIMEOUT_MS = 30_000;
 const CACHE_TTL_MS = 15 * 60_000;
 
 const nameCache = new Map();
