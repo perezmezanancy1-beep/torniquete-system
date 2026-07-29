@@ -20,6 +20,10 @@ def keycode_to_character(keycode, shift_pressed=False):
 
     if len(character) == 1 and character.isalpha():
         return character.upper() if shift_pressed else character
+    # El lector está configurado como teclado latinoamericano y emite
+    # Shift+0 para el signo "=" usado como padding por base64Url de Dart.
+    if keycode == "KEY_0" and shift_pressed:
+        return "="
     if keycode == "KEY_MINUS" and shift_pressed:
         return "_"
     if keycode == "KEY_EQUAL" and shift_pressed:

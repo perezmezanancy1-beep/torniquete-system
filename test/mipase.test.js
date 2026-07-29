@@ -14,16 +14,16 @@ const {
 } = require("../mipase");
 
 const NOW = Date.UTC(2026, 6, 29, 15, 0, 0);
-const PYTHON_REFERENCE_TOKEN = "lVrR55sJNvgq0ymvueB6F0UUwI2MMmEpa88";
+const DART_REFERENCE_TOKEN = "i0m2irprvaZcNEL5AOYP9vUqWfdfHEwwgRg";
 
-test("es compatible byte a byte con el algoritmo Python original", () => {
+test("es compatible byte a byte con Mi Pase en Dart", () => {
   const token = issueToken({
     personaId: 123456789,
     codigoRol: 2,
     now: 1785334800000,
   });
 
-  assert.equal(token, PYTHON_REFERENCE_TOKEN);
+  assert.equal(token, DART_REFERENCE_TOKEN);
 });
 
 test("emite y valida un token reciente con los datos de la persona", () => {

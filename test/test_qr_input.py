@@ -14,6 +14,7 @@ class QrInputTests(unittest.TestCase):
         self.assertEqual(keycode_to_character("KEY_MINUS"), "-")
         self.assertEqual(keycode_to_character("KEY_MINUS", True), "_")
         self.assertEqual(keycode_to_character("KEY_EQUAL"), "=")
+        self.assertEqual(keycode_to_character("KEY_0", True), "=")
 
     def test_reconstructs_complete_mipase_token(self):
         reader = QrKeyboardBuffer()

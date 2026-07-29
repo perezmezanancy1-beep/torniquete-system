@@ -1,6 +1,6 @@
 "use strict";
 
-const PERIOD_MS = 60_000;
+const PERIOD_MS = 22_000;
 const MAX_TOKEN_AGE_MS = 2 * 60_000;
 const CLOCK_SKEW_MS = 15_000;
 const BASE64_URL_ALPHABET =
@@ -134,7 +134,7 @@ function inspectToken(token, options = {}) {
   const now = Number(options.now ?? Date.now());
   const tolerance = Number.isInteger(options.tolerance)
     ? Math.max(0, Math.min(options.tolerance, 1440))
-    : 2;
+    : 6;
   const maxAgeMs = Number(options.maxAgeMs ?? MAX_TOKEN_AGE_MS);
   const futureToleranceMs = Number(
     options.futureToleranceMs ?? CLOCK_SKEW_MS
