@@ -16,6 +16,7 @@ const {
 } = require("./mipase");
 
 const VISITOR_DURATION_MS = 7 * 60 * 60 * 1000;
+const MOVEMENT_COOLDOWN_MS = 45_000;
 
 const app = express();
 app.disable("x-powered-by");
@@ -104,6 +105,15 @@ function colombiaDateTime(date) {
     minute: "2-digit",
     second: "2-digit",
     hour12: false,
+  }).format(date);
+}
+
+function colombiaDateKey(date) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Bogota",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
   }).format(date);
 }
 
@@ -380,9 +390,34 @@ app.post("/validar", async (req, res) => {
       });
     }
 
-    const tipo = user.estado === "dentro" ? "salida" : "entrada";
-    const estado = tipo === "entrada" ? "dentro" : "fuera";
     const registeredAt = new Date();
+    const lastMovementAt = new Date(user.ultimoMovimiento);
+    const lastMovementMs = lastMovementAt.getTime();
+    const movementAgeMs = registeredAt.getTime() - lastMovementMs;
+    const lastMovementType = user.ultimoMovimientoTipo;
+
+    if (
+      Number.isFinite(lastMovementMs) &&
+      movementAgeMs >= 0 &&
+      movementAgeMs < MOVEMENT_COOLDOWN_MS &&
+      (lastMovementType === "entrada" || lastMovementType === "salida")
+    ) {
+      const movementLabel =
+        lastMovementType === "entrada" ? "entrada" : "salida";
+      return res.status(409).json({
+        ok: false,
+        error: "MOVIMIENTO_RECIENTE",
+        tipo: lastMovementType,
+        mensaje: `La ${movementLabel} ya fue registrada.`,
+      });
+    }
+
+    const stateIsFromToday =
+      Number.isFinite(lastMovementMs) &&
+      colombiaDateKey(lastMovementAt) === colombiaDateKey(registeredAt);
+    const tipo =
+      user.estado === "dentro" && stateIsFromToday ? "salida" : "entrada";
+    const estado = tipo === "entrada" ? "dentro" : "fuera";
 
     await ref.update({
       estado,

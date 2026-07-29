@@ -28,6 +28,7 @@ except ImportError:
 
 
 URL_VALIDAR = "https://torniquete-system.onrender.com/validar"
+URL_HEALTH = "https://torniquete-system.onrender.com/health"
 URL_FIREBASE = (
     "https://torniquete-universidad-default-rtdb.firebaseio.com/usuarios"
 )
@@ -302,6 +303,14 @@ def validate_qr(token):
             enqueue_voice("El código QR ya expiró")
         elif error_code == "TOKEN_YA_UTILIZADO":
             enqueue_voice("Este código QR ya fue utilizado")
+        elif error_code == "MOVIMIENTO_RECIENTE":
+            movement = data.get("tipo")
+            if movement == "entrada":
+                enqueue_voice("La entrada ya fue registrada")
+            elif movement == "salida":
+                enqueue_voice("La salida ya fue registrada")
+            else:
+                enqueue_voice("El movimiento ya fue registrado")
         else:
             enqueue_voice("Acceso denegado")
     except requests.RequestException as error:
@@ -319,6 +328,20 @@ def qr_validation_worker():
             validate_qr(token)
         finally:
             qr_queue.task_done()
+
+
+def backend_keepalive_worker():
+    while not stop_event.is_set():
+        try:
+            response = http.get(URL_HEALTH, timeout=(4, 10))
+            if not response.ok:
+                print(
+                    f"Backend health status={response.status_code}",
+                    flush=True,
+                )
+        except requests.RequestException as error:
+            print(f"Backend temporalmente no disponible: {error}", flush=True)
+        stop_event.wait(240)
 
 
 def qr_reader_worker():
@@ -507,6 +530,11 @@ def main():
         threading.Thread(
             target=qr_validation_worker,
             name="qr-validation",
+            daemon=True,
+        ),
+        threading.Thread(
+            target=backend_keepalive_worker,
+            name="backend-keepalive",
             daemon=True,
         ),
         threading.Thread(target=qr_reader_worker, name="qr-reader", daemon=True),
