@@ -87,6 +87,9 @@ class FakeEnrollmentSensor:
         self.events.append("compare")
         return next(self.comparison_scores)
 
+    def convertImage(self, buffer_number):
+        self.events.append(f"convert:{buffer_number}")
+
     def createTemplate(self):
         self.events.append("create")
         return True
@@ -143,7 +146,7 @@ class FingerprintFlowTests(unittest.TestCase):
 
         self.assertNotEqual(old_path, new_path)
 
-    def test_retries_second_sample_and_searches_only_merged_template(self):
+    def test_uses_automatic_frames_and_promotes_the_latest_good_capture(self):
         sensor = FakeEnrollmentSensor()
         assigned = []
         original_functions = (
@@ -182,8 +185,19 @@ class FingerprintFlowTests(unittest.TestCase):
                 self.module.wait_for_finger,
             ) = original_functions
 
-        self.assertEqual(sensor.events[:3], ["compare", "compare", "compare"])
-        self.assertEqual(sensor.events[3:], ["create", "search", "store"])
+        self.assertEqual(
+            sensor.events,
+            [
+                "convert:2",
+                "compare",
+                "compare",
+                "convert:1",
+                "compare",
+                "create",
+                "search",
+                "store",
+            ],
+        )
         self.assertEqual(assigned, [("123", "entrada", 6)])
 
 if __name__ == "__main__":

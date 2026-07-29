@@ -59,8 +59,8 @@ FINGERPRINT_SECURITY_LEVEL = 1
 FINGERPRINT_MATCH_MIN_SCORE = 30
 FINGERPRINT_STABLE_PRESENT_READS = 2
 FINGERPRINT_STABLE_ABSENT_READS = 2
-FINGERPRINT_CAPTURE_ROUNDS = 1
-FINGERPRINT_SECOND_SAMPLE_ATTEMPTS = 3
+FINGERPRINT_REPOSITION_ATTEMPTS = 2
+FINGERPRINT_HOLD_SECONDS = 0.45
 LOG_FULL_QR = os.environ.get("TORNIQUETE_LOG_FULL_QR") == "1"
 
 stop_event = threading.Event()
@@ -935,6 +935,46 @@ def assign_fingerprint_to_person(person_id, direction, position):
         users_cache["expires_at"] = 0
 
 
+def store_merged_fingerprint(sensor, person_id, direction):
+    if not sensor.createTemplate():
+        raise RuntimeError("El sensor no pudo formar la plantilla.")
+
+    existing_position, accuracy = sensor.searchTemplate()
+    is_duplicate = (
+        existing_position >= 0
+        and accuracy >= FINGERPRINT_MATCH_MIN_SCORE
+    )
+    if is_duplicate:
+        owner_id, _owner = find_person_by_fingerprint(
+            existing_position,
+            direction,
+        )
+        if not owner_id:
+            raise RuntimeError(
+                "La huella coincide con una plantilla sin usuario asignado"
+            )
+        if owner_id != person_id:
+            raise RuntimeError(
+                "La huella ya pertenece a otra persona en este lector"
+            )
+        position = existing_position
+    else:
+        position = sensor.storeTemplate()
+
+    assign_fingerprint_to_person(
+        person_id,
+        direction,
+        position,
+    )
+    print(
+        "HUELLA PLANTILLA "
+        f"persona={person_id} id={position} "
+        f"duplicada={is_duplicate} precision={accuracy}",
+        flush=True,
+    )
+    return int(position)
+
+
 def enroll_fingerprint(sensor, command, direction):
     command_id = str(command.get("id") or "")
     person_id = str(command.get("personaId") or "")
@@ -942,123 +982,90 @@ def enroll_fingerprint(sensor, command, direction):
     if not command_id or not person_id.isdigit():
         return
 
-    enqueue_voice("Coloque el dedo")
+    first_prompt = (
+        f"Coloque el dedo en el lector de {reader_label} "
+        "y manténgalo quieto."
+    )
+    enqueue_voice("Coloque el dedo y manténgalo quieto")
 
     try:
         position = None
-        for capture_round in range(1, FINGERPRINT_CAPTURE_ROUNDS + 1):
-            first_prompt = (
-                f"Coloque el dedo en el lector de {reader_label}."
-                if capture_round == 1
-                else "Coloque nuevamente el dedo, centrado y sin moverlo."
-            )
-            if capture_round > 1:
-                enqueue_voice(first_prompt)
-            capture_fingerprint_sample(
-                sensor,
-                0x01,
-                command_id,
-                first_prompt,
-            )
+        capture_fingerprint_sample(
+            sensor,
+            0x01,
+            command_id,
+            first_prompt,
+        )
 
-            for second_attempt in range(
-                1,
-                FINGERPRINT_SECOND_SAMPLE_ATTEMPTS + 1,
-            ):
-                request_finger_removal(sensor, command_id)
-                second_prompt = (
-                    "Coloque de nuevo el mismo dedo."
-                    if second_attempt == 1
-                    else "Ajuste ligeramente el dedo y colóquelo otra vez."
-                )
-                enqueue_voice(second_prompt)
-                capture_fingerprint_sample(
+        update_fingerprint_command(
+            command_id,
+            estado="procesando",
+            mensaje="Mantenga el dedo quieto mientras se confirma la lectura.",
+        )
+        stop_event.wait(FINGERPRINT_HOLD_SECONDS)
+        if wait_for_finger(
+            sensor,
+            True,
+            timeout_seconds=3,
+            stable_reads=1,
+        ):
+            sensor.convertImage(0x02)
+            comparison_score = sensor.compareCharacteristics()
+            print(
+                "HUELLA COMPARACION "
+                f"persona={person_id} modo=automatica "
+                f"puntuacion={comparison_score}",
+                flush=True,
+            )
+            if comparison_score > 0:
+                position = store_merged_fingerprint(
                     sensor,
-                    0x02,
-                    command_id,
-                    second_prompt,
+                    person_id,
+                    direction,
                 )
-                comparison_score = sensor.compareCharacteristics()
-                print(
-                    "HUELLA COMPARACION "
-                    f"persona={person_id} ronda={capture_round} "
-                    f"intento={second_attempt} puntuacion={comparison_score}",
-                    flush=True,
-                )
-                if comparison_score > 0:
-                    if not sensor.createTemplate():
-                        raise RuntimeError(
-                            "El sensor no pudo formar la plantilla."
-                        )
-                    existing_position, accuracy = sensor.searchTemplate()
-                    is_duplicate = (
-                        existing_position >= 0
-                        and accuracy >= FINGERPRINT_MATCH_MIN_SCORE
-                    )
-                    if is_duplicate:
-                        owner_id, _owner = find_person_by_fingerprint(
-                            existing_position,
-                            direction,
-                        )
-                        if not owner_id:
-                            raise RuntimeError(
-                                "La huella coincide con una plantilla "
-                                "sin usuario asignado"
-                            )
-                        if owner_id and owner_id != person_id:
-                            raise RuntimeError(
-                                "La huella ya pertenece a otra persona "
-                                "en este lector"
-                            )
-                        position = existing_position
-                    else:
-                        position = sensor.storeTemplate()
-                    assign_fingerprint_to_person(
-                        person_id,
-                        direction,
-                        position,
-                    )
-                    print(
-                        "HUELLA PLANTILLA "
-                        f"persona={person_id} id={position} "
-                        f"duplicada={is_duplicate} "
-                        f"precision={accuracy}",
-                        flush=True,
-                    )
-                    break
 
-                if (
-                    second_attempt <
-                    FINGERPRINT_SECOND_SAMPLE_ATTEMPTS
-                ):
-                    update_fingerprint_command(
-                        command_id,
-                        estado="procesando",
-                        mensaje=(
-                            "La posición cambió. Retire el dedo y vuelva "
-                            "a colocarlo centrado."
-                        ),
-                    )
-                    enqueue_voice(
-                        "La posición cambió. Vamos a intentarlo otra vez"
-                    )
-
+        for attempt in range(1, FINGERPRINT_REPOSITION_ATTEMPTS + 1):
             if position is not None:
                 break
+            request_finger_removal(sensor, command_id)
+            second_prompt = (
+                "Vuelva a colocar el mismo dedo, centrado, "
+                "y manténgalo quieto."
+            )
+            enqueue_voice("Coloque el dedo de nuevo y manténgalo quieto")
+            capture_fingerprint_sample(
+                sensor,
+                0x02,
+                command_id,
+                second_prompt,
+            )
+            comparison_score = sensor.compareCharacteristics()
+            print(
+                "HUELLA COMPARACION "
+                f"persona={person_id} modo=recolocada "
+                f"intento={attempt} puntuacion={comparison_score}",
+                flush=True,
+            )
+            if comparison_score > 0:
+                position = store_merged_fingerprint(
+                    sensor,
+                    person_id,
+                    direction,
+                )
+                break
 
-            if capture_round < FINGERPRINT_CAPTURE_ROUNDS:
+            if attempt < FINGERPRINT_REPOSITION_ATTEMPTS:
+                # La imagen más reciente pasa a ser la nueva referencia.
+                # Así una primera captura deficiente no bloquea el registro.
+                sensor.convertImage(0x01)
                 update_fingerprint_command(
                     command_id,
                     estado="procesando",
                     mensaje=(
-                        "Tomaremos una muestra nueva. Retire el dedo."
+                        "No hubo suficiente coincidencia. Retire y coloque "
+                        "el dedo una vez más."
                     ),
                 )
-                enqueue_voice(
-                    "Tomaremos una muestra nueva. Retire el dedo"
-                )
-                if not wait_for_finger(sensor, False, 15):
-                    raise TimeoutError("No se retiró completamente el dedo")
 
         if position is None:
             raise RuntimeError(
