@@ -89,6 +89,27 @@ test("recupera exactamente el último carácter omitido por el lector HID", () =
   assert.equal(result.recoveredTrailingCharacter, true);
 });
 
+test("recupera un carácter interno omitido en un token Dart con padding", () => {
+  const token = issueToken({
+    personaId: 176723,
+    codigoRol: 3,
+    now: NOW - 10_000,
+  });
+  const padded = token + "=".repeat((4 - (token.length % 4)) % 4);
+  const missingIndex = 8;
+  const truncated =
+    padded.slice(0, missingIndex) + padded.slice(missingIndex + 1);
+
+  const result = inspectTokenWithTrailingRecovery(truncated, { now: NOW });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.info.personaId, 176723);
+  assert.equal(result.token, token);
+  assert.equal(result.recoveredMissingCharacter, true);
+  assert.equal(result.recoveredCharacterIndex, missingIndex);
+  assert.equal(result.recoveredTrailingCharacter, false);
+});
+
 test("mantiene la expiración aunque el lector omita el último carácter", () => {
   const token = issueToken({
     personaId: 1047037821,

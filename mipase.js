@@ -231,40 +231,103 @@ function inspectTokenWithTrailingRecovery(token, options = {}) {
     authenticatedReasons.has(directResult.reason) ||
     !normalized ||
     normalized.length > 512 ||
-    !/^[A-Za-z0-9_-]+$/u.test(normalized)
+    !/^[A-Za-z0-9_-]+={0,2}$/u.test(normalized)
   ) {
     return Object.freeze({
       ...directResult,
       token: normalized,
+      recoveredMissingCharacter: false,
       recoveredTrailingCharacter: false,
     });
   }
 
-  const matches = [];
-  for (const character of BASE64_URL_ALPHABET) {
-    const candidateToken = normalized + character;
-    const candidateResult = inspectToken(candidateToken, options);
-    if (
-      candidateResult.ok ||
-      authenticatedReasons.has(candidateResult.reason)
-    ) {
-      matches.push({ candidateToken, candidateResult });
+  const unpadded = normalized.replace(/=+$/u, "");
+  const requestedTolerance = Number.isInteger(options.tolerance)
+    ? options.tolerance
+    : 6;
+  const recoveryOptions = {
+    ...options,
+    tolerance: Math.min(Math.max(0, requestedTolerance), 8),
+  };
+  const matches = new Map();
+
+  for (let index = 0; index <= unpadded.length; index += 1) {
+    for (const character of BASE64_URL_ALPHABET) {
+      const candidateToken =
+        unpadded.slice(0, index) +
+        character +
+        unpadded.slice(index);
+      if (matches.has(candidateToken)) {
+        continue;
+      }
+
+      const candidateResult = inspectToken(candidateToken, recoveryOptions);
+      if (
+        candidateResult.ok ||
+        authenticatedReasons.has(candidateResult.reason)
+      ) {
+        matches.set(candidateToken, {
+          candidateToken,
+          candidateResult,
+          recoveredIndex: index,
+        });
+      }
     }
   }
 
-  if (matches.length !== 1) {
+  const candidates = [...matches.values()].sort(
+    (left, right) => right.recoveredIndex - left.recoveredIndex
+  );
+  let match = candidates[0];
+
+  if (candidates.length > 1) {
+    const allValid = candidates.every(
+      (candidate) => candidate.candidateResult.ok
+    );
+    const sameIdentity = allValid && candidates.every(
+      (candidate) =>
+        candidate.candidateResult.info.personaId ===
+          match.candidateResult.info.personaId &&
+        candidate.candidateResult.info.codigoRol ===
+          match.candidateResult.info.codigoRol
+    );
+    const emittedTimes = candidates.map((candidate) =>
+      candidate.candidateResult.ok
+        ? candidate.candidateResult.info.emitidoMs
+        : candidate.candidateResult.emittedAtMs
+    );
+    const closeEmissionTimes =
+      Math.max(...emittedTimes) - Math.min(...emittedTimes) <= 1_000;
+    const sameAuthenticatedReason = candidates.every(
+      (candidate) =>
+        candidate.candidateResult.reason ===
+        match.candidateResult.reason
+    );
+
+    if (
+      !closeEmissionTimes ||
+      !(sameIdentity || sameAuthenticatedReason)
+    ) {
+      match = null;
+    }
+  }
+
+  if (!match) {
     return Object.freeze({
       ...directResult,
       token: normalized,
+      recoveredMissingCharacter: false,
       recoveredTrailingCharacter: false,
     });
   }
 
-  const match = matches[0];
   return Object.freeze({
     ...match.candidateResult,
     token: match.candidateToken,
-    recoveredTrailingCharacter: true,
+    recoveredCharacterIndex: match.recoveredIndex,
+    recoveredCandidateCount: candidates.length,
+    recoveredMissingCharacter: true,
+    recoveredTrailingCharacter: match.recoveredIndex === unpadded.length,
   });
 }
 

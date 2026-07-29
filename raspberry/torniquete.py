@@ -11,7 +11,6 @@ import threading
 import time
 
 import evdev
-from gtts import gTTS
 from pyfingerprint.pyfingerprint import PyFingerprint
 import requests
 from requests.adapters import HTTPAdapter
@@ -164,24 +163,35 @@ def voice_worker():
         try:
             with tempfile.NamedTemporaryFile(
                 prefix="voz_torniquete_",
-                suffix=".mp3",
+                suffix=".wav",
                 delete=False,
             ) as temporary:
                 audio_path = temporary.name
 
-            gTTS(text=text, lang="es").save(audio_path)
             subprocess.run(
                 [
-                    "mpg123",
-                    "-q",
-                    "-f",
-                    "65536",
+                    "espeak-ng",
+                    "-v",
+                    "es-419",
+                    "-s",
+                    "155",
+                    "-p",
+                    "48",
                     "-a",
-                    AUDIO_DEVICE,
+                    "180",
+                    "-w",
                     audio_path,
+                    text,
                 ],
+                check=True,
+                timeout=5,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            subprocess.run(
+                ["aplay", "-q", "-D", AUDIO_DEVICE, audio_path],
                 check=False,
-                timeout=20,
+                timeout=15,
             )
         except Exception as error:
             print(f"Error de voz: {error}", flush=True)
@@ -205,14 +215,15 @@ def process_authorized_access(data):
     person = data.get("persona") or {}
     person_id = person.get("personaId", "")
     name = (person.get("nombre") or f"usuario {person_id}").strip()
+    spoken_name = " ".join(name.lower().title().split())
     movement = data.get("tipo")
 
     if movement == "entrada":
         threading.Thread(target=open_entry, daemon=True).start()
-        enqueue_voice(f"Bienvenido {name}")
+        enqueue_voice(f"Bienvenido, {spoken_name}")
     elif movement == "salida":
         threading.Thread(target=open_exit, daemon=True).start()
-        enqueue_voice(f"Nos vemos pronto {name}")
+        enqueue_voice(f"Nos vemos pronto, {spoken_name}")
     else:
         print("Respuesta autorizada sin tipo de movimiento", flush=True)
         enqueue_voice("Acceso autorizado")

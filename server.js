@@ -9,6 +9,7 @@ const twilio = require("twilio");
 
 const { fetchPersonName } = require("./epica");
 const {
+  PERIOD_MS,
   ROLES,
   inspectTokenWithTrailingRecovery,
   issueToken,
@@ -107,11 +108,22 @@ function colombiaDateTime(date) {
 }
 
 function tokenFingerprint(token) {
-  return crypto.createHash("sha256").update(token, "utf8").digest("hex");
+  const canonicalToken = String(token).replace(/=+$/u, "");
+  return crypto
+    .createHash("sha256")
+    .update(canonicalToken, "utf8")
+    .digest("hex");
 }
 
-async function claimTokenOnce(token) {
-  const fingerprint = tokenFingerprint(token);
+function qrIdentityFingerprint(info) {
+  const windowNumber = Math.floor(info.emitidoMs / PERIOD_MS);
+  return tokenFingerprint(
+    `MIPASE:${info.personaId}:${info.codigoRol}:${windowNumber}`
+  );
+}
+
+async function claimTokenOnce(info) {
+  const fingerprint = qrIdentityFingerprint(info);
   const usedTokenRef = db.ref(`qrUsados/${fingerprint}`);
   const result = await usedTokenRef.transaction((currentValue) => {
     if (currentValue !== null) {
@@ -302,16 +314,16 @@ app.post("/validar", async (req, res) => {
       });
     }
 
-    const token = validation.token;
-    if (validation.recoveredTrailingCharacter) {
+    if (validation.recoveredMissingCharacter) {
       console.warn(
-        "QR recuperado: el lector omitió el último carácter " +
-        `(longitud recibida=${receivedToken.length})`
+        "QR recuperado: el lector omitió un carácter " +
+        `(posición=${validation.recoveredCharacterIndex}, ` +
+        `longitud recibida=${receivedToken.length})`
       );
     }
 
     const info = validation.info;
-    if (!(await claimTokenOnce(token))) {
+    if (!(await claimTokenOnce(info))) {
       return res.status(409).json({
         ok: false,
         error: "TOKEN_YA_UTILIZADO",
@@ -376,7 +388,7 @@ app.post("/validar", async (req, res) => {
       estado,
       ultimoMovimiento: registeredAt.toISOString(),
       ultimoMovimientoTipo: tipo,
-      ultimoQRHash: tokenFingerprint(token),
+      ultimoQRHash: qrIdentityFingerprint(info),
     });
 
     await db.ref("historial").push({
