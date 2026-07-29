@@ -21,9 +21,9 @@ function requireServerConfiguration() {
   if (!process.env.FIREBASE_CONFIG) {
     throw new Error("FIREBASE_CONFIG no está configurada");
   }
-  if (!process.env.MIPASE_SECRET || process.env.MIPASE_SECRET.length < 16) {
+  if (!process.env.MIPASE_SECRET || process.env.MIPASE_SECRET.length < 12) {
     throw new Error(
-      "MIPASE_SECRET no está configurada o tiene menos de 16 caracteres"
+      "MIPASE_SECRET no está configurada o tiene menos de 12 caracteres"
     );
   }
 }

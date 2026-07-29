@@ -24,7 +24,7 @@ FIREBASE_DATABASE_URL   # opcional; ya existe un valor predeterminado
 EPICA_TIMEOUT_MS        # opcional; 5000 ms por defecto
 ```
 
-El servidor se niega a iniciar si falta `MIPASE_SECRET` o si tiene menos de 16
+El servidor se niega a iniciar si falta `MIPASE_SECRET` o si tiene menos de 12
 caracteres.
 
 ## Flujo

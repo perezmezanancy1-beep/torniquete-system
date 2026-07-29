@@ -14,9 +14,9 @@ const ROLES = Object.freeze({
 
 function requireSecret() {
   const secret = process.env.MIPASE_SECRET;
-  if (!secret || secret.length < 16) {
+  if (!secret || secret.length < 12) {
     throw new Error(
-      "MIPASE_SECRET no está configurada o tiene menos de 16 caracteres"
+      "MIPASE_SECRET no está configurada o tiene menos de 12 caracteres"
     );
   }
   return Buffer.from(secret, "utf8");
