@@ -670,6 +670,119 @@ def delete_exit_template(position):
         gc.collect()
 
 
+def clear_fingerprint_sensor(path, label):
+    last_error = None
+    for attempt in range(1, 4):
+        sensor = None
+        try:
+            sensor = connect_fingerprint_sensor(path)
+            sensor.clearDatabase()
+            remaining = int(sensor.getTemplateCount())
+            if remaining != 0:
+                raise RuntimeError(
+                    f"{label} conserva {remaining} plantillas"
+                )
+            print(f"HUELLAS BORRADAS {label} intento={attempt}", flush=True)
+            return
+        except Exception as error:
+            last_error = error
+            print(
+                f"Reintentando borrado {label} intento={attempt}: {error}",
+                flush=True,
+            )
+            time.sleep(0.4)
+        finally:
+            close_fingerprint_sensor(sensor)
+            gc.collect()
+    raise RuntimeError(f"No se pudo limpiar {label}: {last_error}")
+
+
+def clear_fingerprint_assignments():
+    response = http.get(f"{URL_FIREBASE}.json", timeout=REQUEST_TIMEOUT)
+    response.raise_for_status()
+    users = response.json() or {}
+    updates = {}
+    fields = (
+        "huella_id",
+        "huella_entrada_id",
+        "huella_salida_id",
+        "huellas_entrada_ids",
+        "huellas_salida_ids",
+    )
+    for person_id, user in users.items():
+        if not isinstance(user, dict):
+            continue
+        for field in fields:
+            if field in user:
+                updates[f"{person_id}/{field}"] = None
+    if updates:
+        response = http.patch(
+            f"{URL_FIREBASE}.json",
+            json=updates,
+            timeout=REQUEST_TIMEOUT,
+        )
+        response.raise_for_status()
+    with users_cache_lock:
+        users_cache["data"] = {}
+        users_cache["expires_at"] = 0
+    return len(updates)
+
+
+def complete_pending_fingerprint_reset():
+    try:
+        response = http.get(
+            f"{URL_FINGERPRINT_CONTROL}.json",
+            timeout=REQUEST_TIMEOUT,
+        )
+        response.raise_for_status()
+        command = response.json() or {}
+        if (
+            command.get("estado") != "borrando"
+            or command.get("accion") != "borrar_todas"
+        ):
+            return
+
+        command_id = str(command.get("id") or "")
+        if not command_id:
+            return
+        print("INICIANDO BORRADO TOTAL DE HUELLAS", flush=True)
+        clear_fingerprint_sensor(
+            FINGERPRINT_ENTRY_DEVICE,
+            "ENTRADA",
+        )
+        clear_fingerprint_sensor(
+            FINGERPRINT_EXIT_DEVICE,
+            "SALIDA",
+        )
+        cleared_fields = clear_fingerprint_assignments()
+        update_fingerprint_command(
+            command_id,
+            estado="completado",
+            mensaje=(
+                "Todas las huellas fueron eliminadas de ambos lectores "
+                "y de Firebase."
+            ),
+            camposEliminados=cleared_fields,
+        )
+        print(
+            f"BORRADO TOTAL COMPLETADO campos={cleared_fields}",
+            flush=True,
+        )
+        enqueue_voice("Todas las huellas fueron eliminadas")
+    except Exception as error:
+        command_id = locals().get("command_id", "")
+        print(f"ERROR BORRANDO TODAS LAS HUELLAS: {error}", flush=True)
+        if command_id:
+            update_fingerprint_command(
+                command_id,
+                estado="error",
+                mensaje=(
+                    "No fue posible limpiar completamente ambos lectores. "
+                    "Intente nuevamente."
+                ),
+            )
+
+
 def complete_pending_fingerprint_sync():
     """Completa una sincronización pendiente antes de abrir los lectores."""
     try:
@@ -809,6 +922,29 @@ def fingerprint_command_worker():
             command_id = str(command.get("id") or "")
             direction = str(command.get("lector") or "").lower()
             expiration = int(command.get("expiraEpochMs") or 0)
+            if (
+                command.get("estado") == "pendiente"
+                and command.get("accion") == "borrar_todas"
+                and command_id
+            ):
+                if expiration and int(time.time() * 1000) > expiration:
+                    update_fingerprint_command(
+                        command_id,
+                        estado="error",
+                        mensaje="La solicitud de borrado expiró.",
+                    )
+                    stop_event.wait(0.75)
+                    continue
+                if update_fingerprint_command(
+                    command_id,
+                    estado="borrando",
+                    mensaje=(
+                        "Borrando huellas de entrada, salida y Firebase."
+                    ),
+                ):
+                    print("REINICIO PARA BORRADO TOTAL DE HUELLAS", flush=True)
+                    stop_event.set()
+                    return
             if (
                 command.get("estado") == "pendiente"
                 and command_id
@@ -1325,6 +1461,7 @@ def main():
     configure_audio()
     signal.signal(signal.SIGTERM, request_shutdown)
     signal.signal(signal.SIGINT, request_shutdown)
+    complete_pending_fingerprint_reset()
     complete_pending_fingerprint_sync()
 
     workers = [

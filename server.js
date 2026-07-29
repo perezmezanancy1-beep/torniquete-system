@@ -107,6 +107,7 @@ function publicFingerprintCommand(command) {
   }
   return {
     id: String(command.id ?? ""),
+    accion: String(command.accion ?? ""),
     personaId: Number(command.personaId),
     nombre: String(command.nombre ?? ""),
     lector: String(command.lector ?? ""),
@@ -592,7 +593,8 @@ app.post("/api/huellas/registrar", async (req, res) => {
         (
           currentState === "pendiente" ||
           currentState === "procesando" ||
-          currentState === "sincronizando"
+          currentState === "sincronizando" ||
+          currentState === "borrando"
         ) &&
         Number.isFinite(expiration) &&
         expiration > now;
@@ -622,6 +624,70 @@ app.post("/api/huellas/registrar", async (req, res) => {
       ok: false,
       error: "ERROR_REGISTRO_HUELLA",
       mensaje: "No fue posible habilitar el lector de huella.",
+    });
+  }
+});
+
+app.post("/api/huellas/borrar-todas", async (req, res) => {
+  try {
+    if (String(req.body?.confirmacion ?? "") !== "BORRAR TODAS") {
+      return res.status(400).json({
+        ok: false,
+        error: "CONFIRMACION_REQUERIDA",
+        mensaje: "Escribe BORRAR para confirmar la eliminación.",
+      });
+    }
+
+    const now = Date.now();
+    const command = {
+      id: crypto.randomUUID(),
+      accion: "borrar_todas",
+      lector: "ambos",
+      estado: "pendiente",
+      mensaje: "Esperando la Raspberry para borrar todas las huellas.",
+      creado: new Date(now).toISOString(),
+      actualizado: new Date(now).toISOString(),
+      expira: new Date(now + FINGERPRINT_COMMAND_TTL_MS).toISOString(),
+      expiraEpochMs: now + FINGERPRINT_COMMAND_TTL_MS,
+    };
+
+    const commandRef = db.ref("controlHuella/actual");
+    const result = await commandRef.transaction((current) => {
+      const currentState = String(current?.estado ?? "");
+      const expiration = new Date(current?.expira ?? 0).getTime();
+      const currentIsActive =
+        [
+          "pendiente",
+          "procesando",
+          "sincronizando",
+          "borrando",
+        ].includes(currentState) &&
+        Number.isFinite(expiration) &&
+        expiration > now;
+      return currentIsActive ? undefined : command;
+    });
+
+    if (!result.committed) {
+      return res.status(409).json({
+        ok: false,
+        error: "LECTOR_OCUPADO",
+        mensaje: "Hay otra operación de huellas en curso.",
+        comando: publicFingerprintCommand(result.snapshot.val()),
+      });
+    }
+
+    console.warn("Eliminación total de huellas solicitada");
+    return res.status(202).json({
+      ok: true,
+      mensaje: "La eliminación total fue enviada a la Raspberry.",
+      comando: publicFingerprintCommand(command),
+    });
+  } catch (error) {
+    console.error("Error solicitando borrado de huellas:", error.message);
+    return res.status(500).json({
+      ok: false,
+      error: "ERROR_BORRANDO_HUELLAS",
+      mensaje: "No fue posible solicitar la eliminación de huellas.",
     });
   }
 });

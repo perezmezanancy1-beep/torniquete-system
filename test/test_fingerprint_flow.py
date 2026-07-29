@@ -135,6 +135,18 @@ class FingerprintFlowTests(unittest.TestCase):
 
         self.assertNotEqual(old_path, new_path)
 
+    def test_reads_primary_plural_and_legacy_fingerprint_positions(self):
+        positions = self.module.fingerprint_positions(
+            {
+                "huellas_entrada_ids": [5, "6", 5],
+                "huella_entrada_id": 7,
+                "huella_id": "8",
+            },
+            "entrada",
+        )
+
+        self.assertEqual(positions, [5, 6, 7, 8])
+
     def test_discards_messy_images_and_stores_first_clear_capture(self):
         sensor = FakeEnrollmentSensor()
         assigned = []

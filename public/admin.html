@@ -527,9 +527,14 @@
             </label>
           </div>
 
-          <button class="button primary" id="activateFingerprint" type="button">
-            Habilitar lector y registrar
-          </button>
+          <div class="actions" style="justify-content: flex-start;">
+            <button class="button primary" id="activateFingerprint" type="button">
+              Habilitar lector y registrar
+            </button>
+            <button class="button danger" id="deleteAllFingerprints" type="button">
+              Borrar todas las huellas
+            </button>
+          </div>
 
           <div class="enrollment-status" id="enrollmentStatus" aria-live="polite">
             <span class="status-dot"></span>
@@ -832,6 +837,7 @@
 
       const button = byId("activateFingerprint");
       button.disabled = true;
+      byId("deleteAllFingerprints").disabled = true;
       setStatus(
         "pending",
         `Activando lector de ${reader}`,
@@ -853,7 +859,50 @@
         checkFingerprintStatus();
       } catch (error) {
         button.disabled = false;
+        byId("deleteAllFingerprints").disabled = false;
         setStatus("error", "No se pudo iniciar", error.message);
+      }
+    }
+
+    async function deleteAllFingerprints() {
+      const accepted = window.confirm(
+        "Esta acción eliminará TODAS las huellas de entrada, salida y Firebase. No se puede deshacer. ¿Deseas continuar?"
+      );
+      if (!accepted) return;
+
+      const typed = window.prompt("Escribe BORRAR para confirmar.");
+      if (typed?.trim().toUpperCase() !== "BORRAR") {
+        setStatus("error", "Eliminación cancelada", "La palabra de confirmación no coincide.");
+        return;
+      }
+
+      const deleteButton = byId("deleteAllFingerprints");
+      deleteButton.disabled = true;
+      byId("activateFingerprint").disabled = true;
+      setStatus(
+        "pending",
+        "Borrando todas las huellas",
+        "La Raspberry limpiará ambos sensores y después Firebase."
+      );
+
+      try {
+        const response = await fetch("/api/huellas/borrar-todas", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ confirmacion: "BORRAR TODAS" })
+        });
+        const data = await response.json();
+        if (!response.ok || !data.ok) {
+          throw new Error(data.mensaje || "No fue posible iniciar la eliminación.");
+        }
+        activeCommandId = data.comando.id;
+        clearInterval(statusTimer);
+        statusTimer = setInterval(checkFingerprintStatus, 900);
+        checkFingerprintStatus();
+      } catch (error) {
+        deleteButton.disabled = false;
+        byId("activateFingerprint").disabled = false;
+        setStatus("error", "No se pudo borrar", error.message);
       }
     }
 
@@ -873,6 +922,16 @@
           clearInterval(statusTimer);
           activeCommandId = null;
           byId("activateFingerprint").disabled = false;
+          byId("deleteAllFingerprints").disabled = false;
+          if (command.accion === "borrar_todas") {
+            setStatus(
+              "success",
+              "Huellas eliminadas",
+              command.mensaje || "Ambos lectores y Firebase quedaron limpios."
+            );
+            showToast("Todas las huellas fueron eliminadas.");
+            return;
+          }
           setStatus(
             "success",
             "Huella registrada",
@@ -884,12 +943,15 @@
           clearInterval(statusTimer);
           activeCommandId = null;
           byId("activateFingerprint").disabled = false;
+          byId("deleteAllFingerprints").disabled = false;
           setStatus("error", "Registro incompleto", command.mensaje);
         } else {
           setStatus(
             "pending",
             command.estado === "procesando"
               ? "Leyendo la huella"
+              : command.estado === "borrando"
+                ? "Borrando todas las huellas"
               : command.estado === "sincronizando"
                 ? "Sincronizando lectores"
                 : "Lector habilitado",
@@ -900,6 +962,7 @@
         clearInterval(statusTimer);
         activeCommandId = null;
         byId("activateFingerprint").disabled = false;
+        byId("deleteAllFingerprints").disabled = false;
         setStatus("error", "Sin respuesta del lector", error.message);
       }
     }
@@ -918,6 +981,7 @@
     byId("search").addEventListener("input", renderUsers);
     byId("fingerprintPerson").addEventListener("change", refreshPersonPreview);
     byId("activateFingerprint").addEventListener("click", activateFingerprint);
+    byId("deleteAllFingerprints").addEventListener("click", deleteAllFingerprints);
 
     byId("userForm").addEventListener("submit", async (event) => {
       event.preventDefault();
