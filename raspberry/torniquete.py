@@ -668,6 +668,69 @@ def assign_fingerprint_to_person(person_id, direction, position):
         users_cache["expires_at"] = 0
 
 
+def enroll_exit_fingerprint_by_search(
+    sensor,
+    person_id,
+    direction,
+    command_id,
+):
+    """Valida dos muestras usando el buscador del firmware USB de salida."""
+    temporary_position = sensor.storeTemplate(
+        positionNumber=-1,
+        charBufferNumber=0x01,
+    )
+    keep_template = False
+    try:
+        request_finger_removal(sensor, command_id)
+        second_prompt = "Coloque de nuevo el mismo dedo."
+        enqueue_voice(second_prompt)
+        capture_fingerprint_sample(
+            sensor,
+            0x01,
+            command_id,
+            second_prompt,
+        )
+        found_position, accuracy = sensor.searchTemplate()
+        print(
+            "HUELLA VALIDACION SALIDA "
+            f"persona={person_id} temporal={temporary_position} "
+            f"encontrada={found_position} puntuacion={accuracy}",
+            flush=True,
+        )
+        if found_position != temporary_position:
+            if found_position >= 0:
+                owner_id, _owner = find_person_by_fingerprint(
+                    found_position,
+                    direction,
+                )
+                if owner_id and owner_id != str(person_id):
+                    raise RuntimeError(
+                        "La huella ya pertenece a otra persona"
+                    )
+            raise RuntimeError(
+                "Las dos muestras no coincidieron. "
+                "Coloque el mismo dedo cubriendo el sensor."
+            )
+
+        assign_fingerprint_to_person(
+            person_id,
+            direction,
+            temporary_position,
+        )
+        keep_template = True
+        return temporary_position
+    finally:
+        if not keep_template:
+            try:
+                sensor.deleteTemplate(temporary_position)
+            except Exception as cleanup_error:
+                print(
+                    "No se pudo eliminar la huella temporal "
+                    f"id={temporary_position}: {cleanup_error}",
+                    flush=True,
+                )
+
+
 def enroll_fingerprint(sensor, command, direction):
     command_id = str(command.get("id") or "")
     person_id = str(command.get("personaId") or "")
@@ -702,6 +765,15 @@ def enroll_fingerprint(sensor, command, direction):
                     existing_position,
                 )
                 position = existing_position
+                break
+
+            if direction == "salida":
+                position = enroll_exit_fingerprint_by_search(
+                    sensor,
+                    person_id,
+                    direction,
+                    command_id,
+                )
                 break
 
             for second_attempt in range(
