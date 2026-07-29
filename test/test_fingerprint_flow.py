@@ -78,6 +78,28 @@ class FakeSensor:
         return next(self.readings)
 
 
+class FakeEnrollmentSensor:
+    def __init__(self):
+        self.comparison_scores = iter([0, 0, 18])
+        self.events = []
+
+    def compareCharacteristics(self):
+        self.events.append("compare")
+        return next(self.comparison_scores)
+
+    def createTemplate(self):
+        self.events.append("create")
+        return True
+
+    def searchTemplate(self):
+        self.events.append("search")
+        return (-1, 0)
+
+    def storeTemplate(self):
+        self.events.append("store")
+        return 6
+
+
 class FingerprintFlowTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -120,6 +142,49 @@ class FingerprintFlowTests(unittest.TestCase):
             self.module.active_voice_model = original_model
 
         self.assertNotEqual(old_path, new_path)
+
+    def test_retries_second_sample_and_searches_only_merged_template(self):
+        sensor = FakeEnrollmentSensor()
+        assigned = []
+        original_functions = (
+            self.module.enqueue_voice,
+            self.module.capture_fingerprint_sample,
+            self.module.request_finger_removal,
+            self.module.update_fingerprint_command,
+            self.module.assign_fingerprint_to_person,
+            self.module.fetch_person,
+            self.module.wait_for_finger,
+        )
+        self.module.enqueue_voice = lambda *_args: None
+        self.module.capture_fingerprint_sample = lambda *_args: None
+        self.module.request_finger_removal = lambda *_args: None
+        self.module.update_fingerprint_command = lambda *_args, **_kwargs: True
+        self.module.assign_fingerprint_to_person = (
+            lambda person_id, direction, position:
+            assigned.append((person_id, direction, position))
+        )
+        self.module.fetch_person = lambda _person_id: {"huella_salida_id": 3}
+        self.module.wait_for_finger = lambda *_args, **_kwargs: True
+        try:
+            self.module.enroll_fingerprint(
+                sensor,
+                {"id": "command-1", "personaId": 123},
+                "entrada",
+            )
+        finally:
+            (
+                self.module.enqueue_voice,
+                self.module.capture_fingerprint_sample,
+                self.module.request_finger_removal,
+                self.module.update_fingerprint_command,
+                self.module.assign_fingerprint_to_person,
+                self.module.fetch_person,
+                self.module.wait_for_finger,
+            ) = original_functions
+
+        self.assertEqual(sensor.events[:3], ["compare", "compare", "compare"])
+        self.assertEqual(sensor.events[3:], ["create", "search", "store"])
+        self.assertEqual(assigned, [("123", "entrada", 6)])
 
 if __name__ == "__main__":
     unittest.main()

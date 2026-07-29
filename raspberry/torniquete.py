@@ -60,7 +60,7 @@ FINGERPRINT_MATCH_MIN_SCORE = 30
 FINGERPRINT_STABLE_PRESENT_READS = 2
 FINGERPRINT_STABLE_ABSENT_READS = 2
 FINGERPRINT_CAPTURE_ROUNDS = 1
-FINGERPRINT_SECOND_SAMPLE_ATTEMPTS = 1
+FINGERPRINT_SECOND_SAMPLE_ATTEMPTS = 3
 LOG_FULL_QR = os.environ.get("TORNIQUETE_LOG_FULL_QR") == "1"
 
 stop_event = threading.Event()
@@ -907,7 +907,7 @@ def request_finger_removal(sensor, command_id):
     enqueue_voice("Retire el dedo")
     if not wait_for_finger(sensor, False, 15):
         raise TimeoutError("No se retiró completamente el dedo")
-    stop_event.wait(0.1)
+    stop_event.wait(0.25)
 
 
 def assign_fingerprint_to_person(person_id, direction, position):
@@ -960,16 +960,6 @@ def enroll_fingerprint(sensor, command, direction):
                 command_id,
                 first_prompt,
             )
-            existing_position, _accuracy = sensor.searchTemplate()
-
-            if existing_position >= 0:
-                assign_fingerprint_to_person(
-                    person_id,
-                    direction,
-                    existing_position,
-                )
-                position = existing_position
-                break
 
             for second_attempt in range(
                 1,
@@ -995,12 +985,45 @@ def enroll_fingerprint(sensor, command, direction):
                     f"intento={second_attempt} puntuacion={comparison_score}",
                     flush=True,
                 )
-                if comparison_score > 0 and sensor.createTemplate():
-                    position = sensor.storeTemplate()
+                if comparison_score > 0:
+                    if not sensor.createTemplate():
+                        raise RuntimeError(
+                            "El sensor no pudo formar la plantilla."
+                        )
+                    existing_position, accuracy = sensor.searchTemplate()
+                    is_duplicate = (
+                        existing_position >= 0
+                        and accuracy >= FINGERPRINT_MATCH_MIN_SCORE
+                    )
+                    if is_duplicate:
+                        owner_id, _owner = find_person_by_fingerprint(
+                            existing_position,
+                            direction,
+                        )
+                        if not owner_id:
+                            raise RuntimeError(
+                                "La huella coincide con una plantilla "
+                                "sin usuario asignado"
+                            )
+                        if owner_id and owner_id != person_id:
+                            raise RuntimeError(
+                                "La huella ya pertenece a otra persona "
+                                "en este lector"
+                            )
+                        position = existing_position
+                    else:
+                        position = sensor.storeTemplate()
                     assign_fingerprint_to_person(
                         person_id,
                         direction,
                         position,
+                    )
+                    print(
+                        "HUELLA PLANTILLA "
+                        f"persona={person_id} id={position} "
+                        f"duplicada={is_duplicate} "
+                        f"precision={accuracy}",
+                        flush=True,
                     )
                     break
 
