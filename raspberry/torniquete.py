@@ -21,11 +21,9 @@ import RPi.GPIO as GPIO
 
 from qr_input import QrKeyboardBuffer
 
-try:
-    from piper import PiperVoice, SynthesisConfig
-except ImportError:
-    PiperVoice = None
-    SynthesisConfig = None
+PiperVoice = None
+SynthesisConfig = None
+piper_import_attempted = False
 
 
 URL_VALIDAR = "https://torniquete-system.onrender.com/validar"
@@ -187,6 +185,19 @@ def enqueue_voice(text):
 
 def load_neural_voice():
     global active_voice_model
+    global PiperVoice
+    global SynthesisConfig
+    global piper_import_attempted
+    if not piper_import_attempted:
+        piper_import_attempted = True
+        try:
+            from piper import PiperVoice as PiperVoiceClass
+            from piper import SynthesisConfig as SynthesisConfigClass
+            PiperVoice = PiperVoiceClass
+            SynthesisConfig = SynthesisConfigClass
+        except ImportError:
+            PiperVoice = None
+            SynthesisConfig = None
     if PiperVoice is None:
         print("Voz neuronal no disponible; usando voz de respaldo", flush=True)
         return None
@@ -600,6 +611,7 @@ def copy_entry_template_to_exit(entry_position):
     entry_sensor = None
     exit_sensor = None
     stored_position = None
+    started_at = time.monotonic()
     try:
         entry_sensor = connect_fingerprint_sensor(FINGERPRINT_ENTRY_DEVICE)
         if not entry_sensor.loadTemplate(int(entry_position), 0x01):
@@ -609,21 +621,26 @@ def copy_entry_template_to_exit(entry_position):
         close_fingerprint_sensor(entry_sensor)
         entry_sensor = None
         gc.collect()
-        time.sleep(0.25)
+        time.sleep(0.05)
 
         exit_sensor = connect_fingerprint_sensor(FINGERPRINT_EXIT_DEVICE)
+        original_download = exit_sensor.downloadCharacteristics
+        exit_sensor.downloadCharacteristics = (
+            lambda charBufferNumber=0x01: list(characteristics)
+        )
         try:
-            exit_sensor.uploadCharacteristics(0x01, characteristics)
-        except Exception:
-            # Algunos firmwares USB envían la plantilla correctamente pero
-            # fallan al responder la verificación interna de la biblioteca.
-            pass
-        close_fingerprint_sensor(exit_sensor)
-        exit_sensor = None
-        gc.collect()
-        time.sleep(0.45)
+            uploaded = exit_sensor.uploadCharacteristics(
+                0x01,
+                characteristics,
+            )
+        finally:
+            exit_sensor.downloadCharacteristics = original_download
+        if not uploaded:
+            raise RuntimeError(
+                "El lector de salida no recibió la plantilla"
+            )
+        time.sleep(0.15)
 
-        exit_sensor = connect_fingerprint_sensor(FINGERPRINT_EXIT_DEVICE)
         recovered = exit_sensor.downloadCharacteristics(0x01)
         if hashlib.sha256(bytes(recovered)).digest() != source_digest:
             raise RuntimeError(
@@ -641,6 +658,12 @@ def copy_entry_template_to_exit(entry_position):
             raise RuntimeError(
                 "La huella guardada en salida no coincide con la original"
             )
+        print(
+            "PLANTILLA TRANSFERIDA "
+            f"entrada={entry_position} salida={stored_position} "
+            f"segundos={time.monotonic() - started_at:.2f}",
+            flush=True,
+        )
         return int(stored_position)
     except Exception:
         if stored_position is not None and exit_sensor is not None:

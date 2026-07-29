@@ -11,7 +11,7 @@ SupplementaryGroups=input dialout gpio audio
 WorkingDirectory=/home/pirb
 ExecStart=/home/pirb/torniquete-venv/bin/python /home/pirb/torniquete.py
 Restart=always
-RestartSec=3
+RestartSec=1
 Environment=PYTHONUNBUFFERED=1
 
 [Install]
