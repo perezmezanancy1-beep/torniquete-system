@@ -81,11 +81,11 @@ class FakeSensor:
 class FakeEnrollmentSensor:
     def __init__(self):
         self.events = []
-        self.positions = iter([6, 7])
+        self.search_results = iter([(-1, 0), (-1, 0), (6, 100)])
 
     def searchTemplate(self):
         self.events.append("search")
-        return (-1, 0)
+        return next(self.search_results)
 
     def convertImage(self, buffer_number):
         self.events.append(f"convert:{buffer_number}")
@@ -100,7 +100,10 @@ class FakeEnrollmentSensor:
 
     def storeTemplate(self, positionNumber=-1, charBufferNumber=0x01):
         self.events.append("store")
-        return next(self.positions)
+        return 6
+
+    def deleteTemplate(self, position_number):
+        self.events.append(f"delete:{position_number}")
 
 
 class FingerprintFlowTests(unittest.TestCase):
@@ -158,7 +161,7 @@ class FingerprintFlowTests(unittest.TestCase):
 
         self.assertEqual(positions, [5, 6, 7, 8])
 
-    def test_discards_messy_images_and_stores_first_clear_capture(self):
+    def test_uses_two_independent_samples_and_stores_one_template(self):
         sensor = FakeEnrollmentSensor()
         assigned = []
         capture_attempts = []
@@ -173,10 +176,11 @@ class FingerprintFlowTests(unittest.TestCase):
         )
         self.module.enqueue_voice = lambda *_args: None
 
-        def capture_with_two_messy_images(*_args):
+        def capture_with_two_messy_images(sensor_arg, buffer_number, *_args):
             capture_attempts.append(True)
             if len(capture_attempts) < 3:
                 raise RuntimeError("The image is too messy")
+            sensor_arg.convertImage(buffer_number)
 
         self.module.capture_fingerprint_sample = capture_with_two_messy_images
         self.module.request_finger_removal = lambda *_args: None
@@ -208,20 +212,17 @@ class FingerprintFlowTests(unittest.TestCase):
         self.assertEqual(
             sensor.events,
             [
-                "convert:2",
-                "compare",
-                "create",
-                "search",
-                "store",
+                "convert:1",
                 "search",
                 "convert:2",
                 "compare",
                 "create",
                 "search",
                 "store",
+                "search",
             ],
         )
-        self.assertEqual(assigned, [("123", "salida", [6, 7])])
+        self.assertEqual(assigned, [("123", "salida", 6)])
 
 if __name__ == "__main__":
     unittest.main()
