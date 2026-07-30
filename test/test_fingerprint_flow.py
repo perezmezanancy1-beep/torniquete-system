@@ -81,29 +81,23 @@ class FakeSensor:
 class FakeEnrollmentSensor:
     def __init__(self):
         self.events = []
-        self.search_results = iter([(-1, 0), (-1, 0), (6, 100)])
+        self.readings = iter([False, True, True, False, False, True])
 
-    def searchTemplate(self):
-        self.events.append("search")
-        return next(self.search_results)
+    def readImage(self):
+        result = next(self.readings)
+        self.events.append(f"read:{result}")
+        return result
 
     def convertImage(self, buffer_number):
         self.events.append(f"convert:{buffer_number}")
-
-    def compareCharacteristics(self):
-        self.events.append("compare")
-        return 18
 
     def createTemplate(self):
         self.events.append("create")
         return True
 
     def storeTemplate(self, positionNumber=-1, charBufferNumber=0x01):
-        self.events.append("store")
-        return 6
-
-    def deleteTemplate(self, position_number):
-        self.events.append(f"delete:{position_number}")
+        self.events.append(f"store:{positionNumber}")
+        return positionNumber
 
 
 class FingerprintFlowTests(unittest.TestCase):
@@ -161,68 +155,57 @@ class FingerprintFlowTests(unittest.TestCase):
 
         self.assertEqual(positions, [5, 6, 7, 8])
 
-    def test_uses_two_independent_samples_and_stores_one_template(self):
+    def test_syncs_only_the_template_created_by_the_current_registration(self):
+        positions = self.module.fingerprint_positions_to_sync(
+            {"huellaId": 9, "huellaIds": [9]},
+            {
+                "huellas_entrada_ids": [5, 6, 9],
+                "huella_entrada_id": 9,
+            },
+        )
+
+        self.assertEqual(positions, [9])
+
+    def test_preserves_the_original_enrollment_sequence(self):
         sensor = FakeEnrollmentSensor()
-        assigned = []
-        capture_attempts = []
         original_functions = (
             self.module.enqueue_voice,
-            self.module.capture_fingerprint_sample,
-            self.module.request_finger_removal,
             self.module.update_fingerprint_command,
-            self.module.assign_fingerprint_to_person,
-            self.module.fetch_person,
-            self.module.wait_for_finger,
+            self.module.time.sleep,
         )
         self.module.enqueue_voice = lambda *_args: None
-
-        def capture_with_two_messy_images(sensor_arg, buffer_number, *_args):
-            capture_attempts.append(True)
-            if len(capture_attempts) < 3:
-                raise RuntimeError("The image is too messy")
-            sensor_arg.convertImage(buffer_number)
-
-        self.module.capture_fingerprint_sample = capture_with_two_messy_images
-        self.module.request_finger_removal = lambda *_args: None
         self.module.update_fingerprint_command = lambda *_args, **_kwargs: True
-        self.module.assign_fingerprint_to_person = (
-            lambda person_id, direction, position:
-            assigned.append((person_id, direction, position))
-        )
-        self.module.fetch_person = lambda _person_id: {"huella_salida_id": 3}
-        self.module.wait_for_finger = lambda *_args, **_kwargs: True
+        self.module.time.sleep = lambda *_args: None
         try:
-            self.module.enroll_fingerprint(
+            position = self.module.register_fingerprint_with_original_flow(
                 sensor,
-                {"id": "command-1", "personaId": 123},
-                "salida",
+                "command-1",
+                "entrada",
+                6,
             )
         finally:
             (
                 self.module.enqueue_voice,
-                self.module.capture_fingerprint_sample,
-                self.module.request_finger_removal,
                 self.module.update_fingerprint_command,
-                self.module.assign_fingerprint_to_person,
-                self.module.fetch_person,
-                self.module.wait_for_finger,
+                self.module.time.sleep,
             ) = original_functions
 
-        self.assertEqual(len(capture_attempts), 4)
         self.assertEqual(
             sensor.events,
             [
+                "read:False",
+                "read:True",
                 "convert:1",
-                "search",
+                "read:True",
+                "read:False",
+                "read:False",
+                "read:True",
                 "convert:2",
-                "compare",
                 "create",
-                "search",
-                "store",
-                "search",
+                "store:6",
             ],
         )
-        self.assertEqual(assigned, [("123", "salida", 6)])
+        self.assertEqual(position, 6)
 
 if __name__ == "__main__":
     unittest.main()
