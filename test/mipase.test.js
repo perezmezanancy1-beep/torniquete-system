@@ -10,6 +10,7 @@ const {
   inspectToken,
   inspectTokenWithTrailingRecovery,
   issueToken,
+  secondsUntilNextToken,
   validateToken,
 } = require("../mipase");
 
@@ -139,6 +140,13 @@ test("rechaza una fotografía del QR después de treinta segundos", () => {
   assert.equal(result.ok, false);
   assert.equal(result.reason, "EXPIRED");
   assert.equal(validateToken(token, { now: NOW, tolerance: 5 }), null);
+});
+
+test("calcula cuánto falta para que Mi Pase genere el siguiente QR", () => {
+  assert.equal(secondsUntilNextToken(NOW, NOW), 22);
+  assert.equal(secondsUntilNextToken(NOW, NOW + 19_001), 3);
+  assert.equal(secondsUntilNextToken(NOW, NOW + 22_000), 0);
+  assert.equal(secondsUntilNextToken(NOW, NOW + 19_001, 30_000), 11);
 });
 
 test("rechaza tokens futuros más allá del margen de reloj", () => {

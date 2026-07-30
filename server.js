@@ -14,6 +14,7 @@ const {
   ROLES,
   inspectTokenWithTrailingRecovery,
   issueToken,
+  secondsUntilNextToken,
 } = require("./mipase");
 const {
   isVisitor,
@@ -22,6 +23,7 @@ const {
 const { recentMovementBlock } = require("./movement");
 
 const MOVEMENT_COOLDOWN_MS = 10_000;
+const VISITOR_QR_REFRESH_MS = 30_000;
 const FINGERPRINT_COMMAND_TTL_MS = 2 * 60_000;
 
 const app = express();
@@ -195,6 +197,14 @@ function qrIdentityFingerprint(info) {
   const windowNumber = Math.floor(info.emitidoMs / PERIOD_MS);
   return tokenFingerprint(
     `MIPASE:${info.personaId}:${info.codigoRol}:${windowNumber}`
+  );
+}
+
+function secondsUntilQRRefresh(info, now) {
+  return secondsUntilNextToken(
+    info.emitidoMs,
+    now,
+    info.codigoRol === 5 ? VISITOR_QR_REFRESH_MS : PERIOD_MS
   );
 }
 
@@ -496,12 +506,31 @@ app.post("/validar", async (req, res) => {
     }
 
     const registeredAt = new Date();
+    const currentQRHash = qrIdentityFingerprint(info);
+    const sameQRAsLastMovement =
+      String(user.ultimoQRHash ?? "") === currentQRHash;
     const recentBlock = recentMovementBlock(
       user,
       registeredAt.getTime(),
       MOVEMENT_COOLDOWN_MS
     );
     if (recentBlock) {
+      if (sameQRAsLastMovement) {
+        const nextQRSeconds = Math.max(
+          recentBlock.retryAfterSeconds,
+          secondsUntilQRRefresh(info, registeredAt.getTime())
+        );
+        return res.status(409).json({
+          ok: false,
+          error: "ESPERAR_NUEVO_QR",
+          tipo: recentBlock.lastType,
+          proximoTipo: recentBlock.nextType,
+          reintentarEnSegundos: nextQRSeconds,
+          mensaje:
+            `Espere ${nextQRSeconds} segundos y use el nuevo código QR ` +
+            `para registrar la ${recentBlock.nextType}.`,
+        });
+      }
       return res.status(409).json({
         ok: false,
         error: "MOVIMIENTO_RECIENTE",
@@ -523,13 +552,44 @@ app.post("/validar", async (req, res) => {
       user.estado === "dentro" && stateIsFromToday ? "salida" : "entrada";
     const estado = tipo === "entrada" ? "dentro" : "fuera";
 
+    if (sameQRAsLastMovement) {
+      const nextQRSeconds = secondsUntilQRRefresh(
+        info,
+        registeredAt.getTime()
+      );
+      return res.status(409).json({
+        ok: false,
+        error: "ESPERAR_NUEVO_QR",
+        tipo: user.ultimoMovimientoTipo,
+        proximoTipo: tipo,
+        reintentarEnSegundos: nextQRSeconds,
+        mensaje: nextQRSeconds > 0
+          ? (
+              `Espere ${nextQRSeconds} segundos y use el nuevo código QR ` +
+              `para registrar la ${tipo}.`
+            )
+          : "Retire el celular y espere a que cambie el código QR.",
+      });
+    }
+
     // El token solo se consume cuando todas las reglas permiten registrar
     // el movimiento. Un intento durante el enfriamiento puede reintentarse.
     if (!(await claimTokenOnce(info))) {
+      const nextQRSeconds = secondsUntilQRRefresh(
+        info,
+        registeredAt.getTime()
+      );
       return res.status(409).json({
         ok: false,
-        error: "TOKEN_YA_UTILIZADO",
-        mensaje: "Este código QR ya fue utilizado.",
+        error: "ESPERAR_NUEVO_QR",
+        proximoTipo: tipo,
+        reintentarEnSegundos: nextQRSeconds,
+        mensaje: nextQRSeconds > 0
+          ? (
+              `Espere ${nextQRSeconds} segundos y use el nuevo código QR ` +
+              `para registrar la ${tipo}.`
+            )
+          : "Retire el celular y espere a que cambie el código QR.",
       });
     }
 
@@ -537,7 +597,7 @@ app.post("/validar", async (req, res) => {
       estado,
       ultimoMovimiento: registeredAt.toISOString(),
       ultimoMovimientoTipo: tipo,
-      ultimoQRHash: qrIdentityFingerprint(info),
+      ultimoQRHash: currentQRHash,
     });
 
     await db.ref("historial").push({

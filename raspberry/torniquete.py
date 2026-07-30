@@ -19,7 +19,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import RPi.GPIO as GPIO
 
-from qr_input import QrKeyboardBuffer
+from qr_input import QrKeyboardBuffer, RecentQrTokens
 
 PiperVoice = None
 SynthesisConfig = None
@@ -51,7 +51,7 @@ PIPER_MODEL = "/home/pirb/voices/es_MX-claude-high.onnx"
 PIPER_FALLBACK_MODEL = "/home/pirb/voices/es_MX-ald-medium.onnx"
 VOICE_CACHE_DIR = "/home/pirb/.torniquete_voice_cache"
 REQUEST_TIMEOUT = (4, 35)
-QR_DEDUP_SECONDS = 3
+QR_DEDUP_SECONDS = 120
 FINGERPRINT_ENROLL_TIMEOUT_SECONDS = 35
 FINGERPRINT_SECURITY_LEVEL = 1
 FINGERPRINT_MATCH_MIN_SCORE = 1
@@ -352,6 +352,23 @@ def movement_retry_voice(data):
     return "El movimiento ya fue registrado"
 
 
+def qr_refresh_voice(data):
+    next_movement = data.get("proximoTipo")
+    try:
+        seconds = int(data.get("reintentarEnSegundos"))
+    except (TypeError, ValueError):
+        seconds = 0
+
+    if seconds > 0:
+        if next_movement in ("entrada", "salida"):
+            return (
+                f"Espere {seconds} segundos y use el nuevo código QR "
+                f"para registrar la {next_movement}"
+            )
+        return f"Espere {seconds} segundos y use el nuevo código QR"
+    return "Retire el celular y espere a que cambie el código QR"
+
+
 def validate_qr(token):
     """Envía exactamente el token leído; la Raspberry nunca descifra."""
     try:
@@ -375,6 +392,8 @@ def validate_qr(token):
             enqueue_voice("El código QR ya expiró")
         elif error_code == "TOKEN_YA_UTILIZADO":
             enqueue_voice("Este código QR ya fue utilizado")
+        elif error_code == "ESPERAR_NUEVO_QR":
+            enqueue_voice(qr_refresh_voice(data))
         elif error_code == "MOVIMIENTO_RECIENTE":
             enqueue_voice(movement_retry_voice(data))
         else:
@@ -411,8 +430,9 @@ def backend_keepalive_worker():
 
 
 def qr_reader_worker():
-    last_token = None
-    last_token_at = 0.0
+    recent_tokens = RecentQrTokens(
+        retention_seconds=QR_DEDUP_SECONDS,
+    )
 
     while not stop_event.is_set():
         device = None
@@ -436,11 +456,8 @@ def qr_reader_worker():
                 if not token:
                     continue
 
-                now = time.monotonic()
-                if token == last_token and now - last_token_at < QR_DEDUP_SECONDS:
+                if not recent_tokens.accept(token):
                     continue
-                last_token = token
-                last_token_at = now
 
                 print(
                     f"QR recibido longitud={len(token)} final={token[-6:]}",

@@ -4,7 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "raspberry"))
 
-from qr_input import QrKeyboardBuffer, keycode_to_character
+from qr_input import RecentQrTokens, QrKeyboardBuffer, keycode_to_character
 
 
 class QrInputTests(unittest.TestCase):
@@ -52,6 +52,15 @@ class QrInputTests(unittest.TestCase):
         reader.feed("KEY_A", 1)
         reader.feed("KEY_A", 2)
         self.assertEqual(reader.feed("KEY_ENTER", 1), "aa")
+
+    def test_ignores_same_visible_qr_until_it_changes(self):
+        recent = RecentQrTokens(retention_seconds=120)
+
+        self.assertTrue(recent.accept("qr-a", now=100))
+        self.assertFalse(recent.accept("qr-a", now=110))
+        self.assertFalse(recent.accept("qr-a", now=150))
+        self.assertTrue(recent.accept("qr-b", now=150))
+        self.assertTrue(recent.accept("qr-a", now=221))
 
 
 if __name__ == "__main__":

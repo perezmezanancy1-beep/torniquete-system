@@ -30,6 +30,28 @@ function windowFor(milliseconds) {
   return Math.floor(milliseconds / PERIOD_MS);
 }
 
+function secondsUntilNextToken(
+  emittedAtMs,
+  now = Date.now(),
+  refreshPeriodMs = PERIOD_MS
+) {
+  const emitted = Number(emittedAtMs);
+  const currentTime = Number(now);
+  const refreshPeriod = Number(refreshPeriodMs);
+  if (
+    !Number.isFinite(emitted) ||
+    !Number.isFinite(currentTime) ||
+    !Number.isFinite(refreshPeriod) ||
+    refreshPeriod <= 0
+  ) {
+    return 0;
+  }
+  return Math.max(
+    0,
+    Math.ceil((emitted + refreshPeriod - currentTime) / 1000)
+  );
+}
+
 function checksum(data, secret) {
   let accumulator = 0x9e;
   for (const byte of data) {
@@ -341,5 +363,6 @@ module.exports = {
   inspectToken,
   inspectTokenWithTrailingRecovery,
   issueToken,
+  secondsUntilNextToken,
   validateToken,
 };

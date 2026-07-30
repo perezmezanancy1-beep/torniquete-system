@@ -186,6 +186,20 @@ class FingerprintFlowTests(unittest.TestCase):
             "Espere 5 segundos para registrar la entrada",
         )
 
+    def test_announces_when_the_visible_qr_will_change(self):
+        message = self.module.qr_refresh_voice(
+            {
+                "proximoTipo": "salida",
+                "reintentarEnSegundos": 7,
+            }
+        )
+
+        self.assertEqual(
+            message,
+            "Espere 7 segundos y use el nuevo código QR "
+            "para registrar la salida",
+        )
+
     def test_reads_primary_plural_and_legacy_fingerprint_positions(self):
         positions = self.module.fingerprint_positions(
             {
