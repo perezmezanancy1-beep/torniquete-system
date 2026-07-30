@@ -63,7 +63,7 @@ test("permite emitir pases temporales para visitantes registrados", () => {
   assert.equal(result.rol, "VISITANTE");
 });
 
-test("acepta un token justo antes de cumplir dos minutos", () => {
+test("acepta un token justo antes de cumplir treinta segundos", () => {
   const token = issueToken({
     personaId: 123456789,
     codigoRol: 1,
@@ -128,7 +128,7 @@ test("mantiene la expiración aunque el lector omita el último carácter", () =
   assert.equal(result.recoveredTrailingCharacter, true);
 });
 
-test("rechaza un token con más de dos minutos", () => {
+test("rechaza una fotografía del QR después de treinta segundos", () => {
   const token = issueToken({
     personaId: 123456789,
     codigoRol: 1,

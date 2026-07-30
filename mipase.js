@@ -1,7 +1,9 @@
 "use strict";
 
 const PERIOD_MS = 22_000;
-const MAX_TOKEN_AGE_MS = 2 * 60_000;
+// El QR visible rota cada 22-30 segundos. Mantener la misma ventana evita
+// que una fotografía siga siendo utilizable después de la renovación.
+const MAX_TOKEN_AGE_MS = 30_000;
 const CLOCK_SKEW_MS = 15_000;
 const BASE64_URL_ALPHABET =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";

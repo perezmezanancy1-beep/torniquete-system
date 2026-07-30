@@ -9,6 +9,7 @@ const twilio = require("twilio");
 
 const { fetchPersonName } = require("./epica");
 const {
+  MAX_TOKEN_AGE_MS,
   PERIOD_MS,
   ROLES,
   inspectTokenWithTrailingRecovery,
@@ -388,7 +389,7 @@ app.post("/api/qr", async (req, res) => {
         institutionalName
       ),
       renuevaEnSegundos: 30,
-      vigenciaMaximaSegundos: 120,
+      vigenciaMaximaSegundos: Math.floor(MAX_TOKEN_AGE_MS / 1000),
     });
   } catch (error) {
     console.error("Error al generar QR:", error.message);

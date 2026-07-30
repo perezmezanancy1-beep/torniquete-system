@@ -37,7 +37,7 @@ caracteres.
    - checksum correcto;
    - persona y rol válidos;
    - fecha no futura (salvo 15 segundos de tolerancia);
-   - antigüedad máxima de 120 segundos;
+   - antigüedad máxima de 30 segundos;
    - que el token no se haya utilizado anteriormente.
 5. Con `personaId`, el servidor consulta `NombrePersona` en Servicios Épica para
    resolver `nombreCompleto`. La consulta tiene timeout y caché de 15 minutos;
@@ -45,7 +45,7 @@ caracteres.
 6. La respuesta incluye nombre, ID, rol, carrera, movimiento y horas de emisión
    y registro.
 
-Si el token superó los dos minutos, el lector muestra **Código QR expirado** y
+Si el token superó los 30 segundos, el lector muestra **Código QR expirado** y
 reproduce por voz: **«El código QR ya expiró»**.
 
 ## Endpoints
