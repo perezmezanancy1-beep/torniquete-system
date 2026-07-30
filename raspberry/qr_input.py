@@ -1,6 +1,3 @@
-import time
-
-
 SHIFT_KEYS = {"KEY_LEFTSHIFT", "KEY_RIGHTSHIFT"}
 ENTER_KEYS = {"KEY_ENTER", "KEY_KPENTER"}
 
@@ -89,29 +86,15 @@ class QrKeyboardBuffer:
         return None
 
 
-class RecentQrTokens:
-    """Acepta una sola vez cada QR durante su vida útil visible."""
+class QrChangeLatch:
+    """Procesa el QR visible una vez y se rearma cuando su contenido cambia."""
 
-    def __init__(self, retention_seconds=120, max_entries=128):
-        self.retention_seconds = float(retention_seconds)
-        self.max_entries = int(max_entries)
-        self.seen = {}
+    def __init__(self):
+        self.current_token = None
 
-    def accept(self, token, now=None):
-        current_time = time.monotonic() if now is None else float(now)
-        cutoff = current_time - self.retention_seconds
-        self.seen = {
-            value: timestamp
-            for value, timestamp in self.seen.items()
-            if timestamp > cutoff
-        }
-
-        if token in self.seen:
+    def accept(self, token):
+        if token == self.current_token:
             return False
 
-        if len(self.seen) >= self.max_entries:
-            oldest = min(self.seen, key=self.seen.get)
-            del self.seen[oldest]
-
-        self.seen[token] = current_time
+        self.current_token = token
         return True

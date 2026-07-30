@@ -19,7 +19,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import RPi.GPIO as GPIO
 
-from qr_input import QrKeyboardBuffer, RecentQrTokens
+from qr_input import QrChangeLatch, QrKeyboardBuffer
 
 PiperVoice = None
 SynthesisConfig = None
@@ -51,7 +51,6 @@ PIPER_MODEL = "/home/pirb/voices/es_MX-claude-high.onnx"
 PIPER_FALLBACK_MODEL = "/home/pirb/voices/es_MX-ald-medium.onnx"
 VOICE_CACHE_DIR = "/home/pirb/.torniquete_voice_cache"
 REQUEST_TIMEOUT = (4, 35)
-QR_DEDUP_SECONDS = 120
 FINGERPRINT_ENROLL_TIMEOUT_SECONDS = 35
 FINGERPRINT_SECURITY_LEVEL = 1
 FINGERPRINT_MATCH_MIN_SCORE = 1
@@ -430,9 +429,7 @@ def backend_keepalive_worker():
 
 
 def qr_reader_worker():
-    recent_tokens = RecentQrTokens(
-        retention_seconds=QR_DEDUP_SECONDS,
-    )
+    visible_qr = QrChangeLatch()
 
     while not stop_event.is_set():
         device = None
@@ -456,7 +453,7 @@ def qr_reader_worker():
                 if not token:
                     continue
 
-                if not recent_tokens.accept(token):
+                if not visible_qr.accept(token):
                     continue
 
                 print(
