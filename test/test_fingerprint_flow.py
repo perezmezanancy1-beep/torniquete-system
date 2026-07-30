@@ -104,6 +104,9 @@ class FakeSyncSensor:
     def __init__(self, characteristics):
         self.events = []
         self.characteristics = list(characteristics)
+        self._PyFingerprint__serial = types.SimpleNamespace(
+            reset_input_buffer=lambda: self.events.append("reset-input")
+        )
 
     def downloadCharacteristics(self, charBufferNumber=0x01):
         self.events.append(f"download:{charBufferNumber}")
@@ -206,6 +209,7 @@ class FingerprintFlowTests(unittest.TestCase):
             sensor.events,
             [
                 "upload:1",
+                "reset-input",
                 "store:-1:1",
                 "load:12:1",
                 "download:1",

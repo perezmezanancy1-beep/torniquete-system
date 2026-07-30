@@ -643,6 +643,14 @@ def store_synced_characteristics(sensor, characteristics):
         if not uploaded:
             raise RuntimeError("El lector de salida no recibió la plantilla")
 
+        # Este modelo deja respuestas de los paquetes de datos en RX después
+        # de la carga. Si no se descartan, la siguiente orden espera el
+        # timeout serial completo y termina leyendo un encabezado residual.
+        serial_port = getattr(sensor, "_PyFingerprint__serial", None)
+        if serial_port is not None:
+            time.sleep(0.15)
+            serial_port.reset_input_buffer()
+
         stored_position = sensor.storeTemplate(
             positionNumber=-1,
             charBufferNumber=0x01,
