@@ -87,14 +87,20 @@ class QrKeyboardBuffer:
 
 
 class QrChangeLatch:
-    """Procesa el QR visible una vez y se rearma cuando su contenido cambia."""
+    """Permite validar y avisar una vez; se rearma cuando cambia el QR."""
 
-    def __init__(self):
+    def __init__(self, max_events_per_token=2):
+        self.max_events_per_token = int(max_events_per_token)
         self.current_token = None
+        self.current_events = 0
 
     def accept(self, token):
-        if token == self.current_token:
+        if token != self.current_token:
+            self.current_token = token
+            self.current_events = 0
+
+        if self.current_events >= self.max_events_per_token:
             return False
 
-        self.current_token = token
+        self.current_events += 1
         return True

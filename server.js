@@ -157,10 +157,16 @@ async function currentPersonName(personaId, ref, storedName) {
       return null;
     }
   );
+  if (storedName) {
+    // La apertura usa inmediatamente el nombre ya almacenado. Épica se
+    // actualiza en segundo plano para no agregar latencia al torniquete.
+    void lookup;
+    return storedName;
+  }
   const timeout = new Promise((resolve) => {
     setTimeout(() => resolve(null), 800);
   });
-  return (await Promise.race([lookup, timeout])) || storedName || null;
+  return (await Promise.race([lookup, timeout])) || null;
 }
 
 function colombiaDateTime(date) {

@@ -57,8 +57,10 @@ class QrInputTests(unittest.TestCase):
         visible_qr = QrChangeLatch()
 
         self.assertTrue(visible_qr.accept("qr-a"))
+        self.assertTrue(visible_qr.accept("qr-a"))
         self.assertFalse(visible_qr.accept("qr-a"))
         self.assertFalse(visible_qr.accept("qr-a"))
+        self.assertTrue(visible_qr.accept("qr-b"))
         self.assertTrue(visible_qr.accept("qr-b"))
         self.assertFalse(visible_qr.accept("qr-b"))
 
