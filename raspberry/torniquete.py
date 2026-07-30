@@ -621,6 +621,49 @@ def close_fingerprint_sensor(sensor):
         pass
 
 
+def store_synced_characteristics(sensor, characteristics):
+    """Guarda y verifica una plantilla usando una conexión ya abierta."""
+    characteristics = list(characteristics)
+    source_digest = hashlib.sha256(bytes(characteristics)).digest()
+    stored_position = None
+    try:
+        # pyfingerprint vuelve a descargar lo recién subido internamente.
+        # Devolver la misma carga evita una transferencia serial redundante.
+        original_download = sensor.downloadCharacteristics
+        sensor.downloadCharacteristics = (
+            lambda charBufferNumber=0x01: list(characteristics)
+        )
+        try:
+            uploaded = sensor.uploadCharacteristics(
+                0x01,
+                characteristics,
+            )
+        finally:
+            sensor.downloadCharacteristics = original_download
+        if not uploaded:
+            raise RuntimeError("El lector de salida no recibió la plantilla")
+
+        stored_position = sensor.storeTemplate(
+            positionNumber=-1,
+            charBufferNumber=0x01,
+        )
+        if not sensor.loadTemplate(stored_position, 0x01):
+            raise RuntimeError("No se pudo verificar la huella de salida")
+        stored = sensor.downloadCharacteristics(0x01)
+        if hashlib.sha256(bytes(stored)).digest() != source_digest:
+            raise RuntimeError(
+                "La huella guardada en salida no coincide con la original"
+            )
+        return int(stored_position)
+    except Exception:
+        if stored_position is not None:
+            try:
+                sensor.deleteTemplate(stored_position)
+            except Exception:
+                pass
+        raise
+
+
 def copy_entry_template_to_exit(entry_position):
     """Copia una plantilla entre sensores sin sacarla de la Raspberry."""
     entry_sensor = None
@@ -632,47 +675,15 @@ def copy_entry_template_to_exit(entry_position):
         if not entry_sensor.loadTemplate(int(entry_position), 0x01):
             raise RuntimeError("No se pudo cargar la huella de entrada")
         characteristics = entry_sensor.downloadCharacteristics(0x01)
-        source_digest = hashlib.sha256(bytes(characteristics)).digest()
         close_fingerprint_sensor(entry_sensor)
         entry_sensor = None
         gc.collect()
-        time.sleep(0.05)
 
         exit_sensor = connect_fingerprint_sensor(FINGERPRINT_EXIT_DEVICE)
-        original_download = exit_sensor.downloadCharacteristics
-        exit_sensor.downloadCharacteristics = (
-            lambda charBufferNumber=0x01: list(characteristics)
+        stored_position = store_synced_characteristics(
+            exit_sensor,
+            characteristics,
         )
-        try:
-            uploaded = exit_sensor.uploadCharacteristics(
-                0x01,
-                characteristics,
-            )
-        finally:
-            exit_sensor.downloadCharacteristics = original_download
-        if not uploaded:
-            raise RuntimeError(
-                "El lector de salida no recibió la plantilla"
-            )
-        time.sleep(0.15)
-
-        recovered = exit_sensor.downloadCharacteristics(0x01)
-        if hashlib.sha256(bytes(recovered)).digest() != source_digest:
-            raise RuntimeError(
-                "El lector de salida no confirmó la plantilla transferida"
-            )
-
-        stored_position = exit_sensor.storeTemplate(
-            positionNumber=-1,
-            charBufferNumber=0x01,
-        )
-        if not exit_sensor.loadTemplate(stored_position, 0x01):
-            raise RuntimeError("No se pudo verificar la huella de salida")
-        stored = exit_sensor.downloadCharacteristics(0x01)
-        if hashlib.sha256(bytes(stored)).digest() != source_digest:
-            raise RuntimeError(
-                "La huella guardada en salida no coincide con la original"
-            )
         print(
             "PLANTILLA TRANSFERIDA "
             f"entrada={entry_position} salida={stored_position} "
@@ -691,6 +702,51 @@ def copy_entry_template_to_exit(entry_position):
         close_fingerprint_sensor(entry_sensor)
         close_fingerprint_sensor(exit_sensor)
         gc.collect()
+
+
+def sync_fingerprint_in_open_exit_sensor(sensor, command):
+    command_id = str(command.get("id") or "")
+    person_id = str(command.get("personaId") or "")
+    entry_position = int(command.get("huellaId"))
+    characteristics = command.get("_syncCharacteristics")
+    started_at = time.monotonic()
+    if not command_id or not person_id.isdigit() or not characteristics:
+        raise ValueError("Datos incompletos para sincronizar la huella")
+
+    stored_position = store_synced_characteristics(
+        sensor,
+        characteristics,
+    )
+    try:
+        assign_fingerprint_to_person(
+            person_id,
+            "salida",
+            stored_position,
+        )
+        if not update_fingerprint_command(
+            command_id,
+            estado="completado",
+            lector="salida",
+            mensaje="Huella registrada en entrada y salida.",
+            huellaId=int(stored_position),
+            huellaIds=[int(stored_position)],
+        ):
+            raise RuntimeError(
+                "La plantilla se copió, pero no se confirmó en Firebase"
+            )
+    except Exception:
+        sensor.deleteTemplate(stored_position)
+        raise
+
+    print(
+        "SINCRONIZACION DIRECTA COMPLETADA "
+        f"persona={person_id} entrada={entry_position} "
+        f"salida={stored_position} "
+        f"segundos={time.monotonic() - started_at:.2f}",
+        flush=True,
+    )
+    enqueue_voice("Huella registrada correctamente")
+    return int(stored_position)
 
 
 def delete_exit_template(position):
@@ -1257,14 +1313,41 @@ def enroll_fingerprint(sensor, command, direction):
                     "La huella se guardó, pero no se pudo iniciar "
                     "la sincronización de salida."
                 )
-            print(
-                "REINICIO PARA SINCRONIZAR HUELLA "
-                f"persona={person_id}",
-                flush=True,
-            )
+
+            try:
+                if not sensor.loadTemplate(position, 0x01):
+                    raise RuntimeError(
+                        "No se pudo preparar la plantilla de entrada"
+                    )
+                characteristics = sensor.downloadCharacteristics(0x01)
+                local_sync_command = dict(command)
+                local_sync_command.update(
+                    {
+                        "huellaId": int(position),
+                        "huellaIds": [int(position)],
+                        "_syncCharacteristics": characteristics,
+                    }
+                )
+                fingerprint_enrollment_queues["salida"].put(
+                    local_sync_command,
+                    timeout=2,
+                )
+                print(
+                    "SINCRONIZACION DIRECTA ENCOLADA "
+                    f"persona={person_id} entrada={position}",
+                    flush=True,
+                )
+            except Exception as sync_error:
+                print(
+                    "SINCRONIZACION DIRECTA NO DISPONIBLE; "
+                    f"reiniciando como respaldo: {sync_error}",
+                    flush=True,
+                )
+                stop_event.set()
+                return
+
             enqueue_voice("Retire el dedo")
             wait_for_finger(sensor, False, 10)
-            stop_event.set()
             return
 
         update_fingerprint_command(
@@ -1323,7 +1406,23 @@ def fingerprint_worker(path, name, direction):
                     command = None
                 if command is not None:
                     try:
-                        enroll_fingerprint(sensor, command, direction)
+                        if command.get("_syncCharacteristics") is not None:
+                            try:
+                                sync_fingerprint_in_open_exit_sensor(
+                                    sensor,
+                                    command,
+                                )
+                            except Exception as sync_error:
+                                print(
+                                    "ERROR SINCRONIZACION DIRECTA; "
+                                    "reiniciando como respaldo: "
+                                    f"{sync_error}",
+                                    flush=True,
+                                )
+                                stop_event.set()
+                                return
+                        else:
+                            enroll_fingerprint(sensor, command, direction)
                     finally:
                         enrollment_queue.task_done()
                     continue

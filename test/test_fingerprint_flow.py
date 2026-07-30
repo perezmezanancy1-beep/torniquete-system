@@ -100,6 +100,32 @@ class FakeEnrollmentSensor:
         return positionNumber
 
 
+class FakeSyncSensor:
+    def __init__(self, characteristics):
+        self.events = []
+        self.characteristics = list(characteristics)
+
+    def downloadCharacteristics(self, charBufferNumber=0x01):
+        self.events.append(f"download:{charBufferNumber}")
+        return list(self.characteristics)
+
+    def uploadCharacteristics(self, char_buffer, characteristics):
+        self.events.append(f"upload:{char_buffer}")
+        self.characteristics = list(characteristics)
+        return True
+
+    def storeTemplate(self, positionNumber=-1, charBufferNumber=0x01):
+        self.events.append(f"store:{positionNumber}:{charBufferNumber}")
+        return 12
+
+    def loadTemplate(self, position_number, char_buffer):
+        self.events.append(f"load:{position_number}:{char_buffer}")
+        return True
+
+    def deleteTemplate(self, position_number):
+        self.events.append(f"delete:{position_number}")
+
+
 class FingerprintFlowTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -165,6 +191,26 @@ class FingerprintFlowTests(unittest.TestCase):
         )
 
         self.assertEqual(positions, [9])
+
+    def test_fast_sync_stores_and_verifies_using_the_open_sensor(self):
+        characteristics = [index % 256 for index in range(512)]
+        sensor = FakeSyncSensor(characteristics)
+
+        position = self.module.store_synced_characteristics(
+            sensor,
+            characteristics,
+        )
+
+        self.assertEqual(position, 12)
+        self.assertEqual(
+            sensor.events,
+            [
+                "upload:1",
+                "store:-1:1",
+                "load:12:1",
+                "download:1",
+            ],
+        )
 
     def test_preserves_the_original_enrollment_sequence(self):
         sensor = FakeEnrollmentSensor()
