@@ -202,9 +202,18 @@
 
         qrImage.src = data.qrDataUrl;
         nombre.textContent = data.persona.nombre || `ID ${data.persona.personaId}`;
+        const visitorExpiration = Number(data.persona.expiracion);
+        const validity = Number.isFinite(visitorExpiration) && visitorExpiration > 0
+          ? `Vigente hasta ${new Intl.DateTimeFormat("es-CO", {
+              dateStyle: "medium",
+              timeStyle: "short",
+              timeZone: "America/Bogota"
+            }).format(new Date(visitorExpiration))}`
+          : "";
         personaInfo.textContent = [
           data.persona.rol,
           data.persona.carrera,
+          validity,
         ].filter(Boolean).join(" · ");
 
         loginBox.hidden = true;

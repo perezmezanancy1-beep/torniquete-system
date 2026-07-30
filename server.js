@@ -14,8 +14,11 @@ const {
   inspectTokenWithTrailingRecovery,
   issueToken,
 } = require("./mipase");
+const {
+  isVisitor,
+  isVisitorAccessActive,
+} = require("./visitor");
 
-const VISITOR_DURATION_MS = 7 * 60 * 60 * 1000;
 const MOVEMENT_COOLDOWN_MS = 10_000;
 const FINGERPRINT_COMMAND_TTL_MS = 2 * 60_000;
 
@@ -93,6 +96,7 @@ function publicPerson(personaId, user, codigoRol, institutionalName = null) {
     tipo: String(user?.tipo ?? "").trim(),
     codigoRol,
     rol: ROLES[codigoRol],
+    expiracion: isVisitor(user) ? Number(user?.expiracion) || null : null,
   };
 }
 
@@ -204,10 +208,6 @@ async function claimTokenOnce(info) {
   return result.committed;
 }
 
-function isVisitor(user) {
-  return normalizeLabel(user?.tipo) === "VISITANTE";
-}
-
 async function ensureVisitorIsActive(ref, user) {
   if (!isVisitor(user)) {
     return true;
@@ -215,8 +215,8 @@ async function ensureVisitorIsActive(ref, user) {
 
   const now = Date.now();
   const explicitExpiration = Number(user.expiracion);
-  if (Number.isFinite(explicitExpiration) && now > explicitExpiration) {
-    return false;
+  if (Number.isFinite(explicitExpiration) && explicitExpiration > 0) {
+    return isVisitorAccessActive(user, now);
   }
 
   let startedAt = Number(user.inicio);
@@ -226,7 +226,14 @@ async function ensureVisitorIsActive(ref, user) {
     user.inicio = startedAt;
   }
 
-  return now - startedAt <= VISITOR_DURATION_MS;
+  return isVisitorAccessActive(
+    {
+      ...user,
+      inicio: startedAt,
+      expiracion: null,
+    },
+    now
+  );
 }
 
 function getTwilioClient() {
@@ -240,7 +247,7 @@ function getTwilioClient() {
   return twilio(process.env.TWILIO_SID, process.env.TWILIO_TOKEN);
 }
 
-async function sendVisitorSms(personaId, phone) {
+async function sendVisitorSms(personaId, phone, user) {
   const client = getTwilioClient();
   if (!client) {
     console.warn("Twilio no configurado; SMS omitido");
@@ -249,12 +256,17 @@ async function sendVisitorSms(personaId, phone) {
 
   const link =
     `https://torniquete-system.onrender.com/qr.html?cedula=${personaId}`;
+  const expiration = Number(user?.expiracion);
+  const validityText =
+    Number.isFinite(expiration) && expiration > 0
+      ? `Su acceso es válido hasta ${colombiaDateTime(new Date(expiration))}`
+      : "Su acceso tiene una vigencia temporal";
   try {
     await client.messages.create({
       body:
         "UAC ACCESO\n\n" +
         "Bienvenido a la Universidad Autónoma del Caribe\n\n" +
-        "Su acceso es válido por 7 horas\n\n" +
+        `${validityText}\n\n` +
         `Ingrese aquí:\n${link}`,
       from: process.env.TWILIO_NUMERO,
       to: `+57${phone}`,
@@ -275,10 +287,38 @@ app.post("/registrar", async (req, res) => {
     }
 
     const data = { ...req.body, cedula: personaId };
+    if (isVisitor(data)) {
+      const now = Date.now();
+      const expiration = Number(data.expiracion);
+      const maximumExpiration = now + 365 * 24 * 60 * 60 * 1000;
+      if (
+        !Number.isFinite(expiration) ||
+        expiration <= now ||
+        expiration > maximumExpiration
+      ) {
+        return res.status(400).json({
+          ok: false,
+          error: "VIGENCIA_VISITANTE_REQUERIDA",
+          mensaje:
+            "Indica una vigencia válida para el visitante, entre un minuto y 365 días.",
+        });
+      }
+      const startedAt =
+        Number.isFinite(Number(data.inicio)) && Number(data.inicio) > 0
+          ? Number(data.inicio)
+          : now;
+      data.inicio = startedAt;
+      data.expiracion = expiration;
+      data.duracionMinutos = Math.max(
+        1,
+        Math.round((expiration - startedAt) / 60_000)
+      );
+      data.nombreManual = true;
+    }
     await db.ref(`usuarios/${personaId}`).set(data);
 
     if (isVisitor(data) && data.celular) {
-      await sendVisitorSms(personaId, data.celular);
+      await sendVisitorSms(personaId, data.celular, data);
     }
 
     return res.json({ ok: true });
@@ -334,7 +374,7 @@ app.post("/api/qr", async (req, res) => {
           light: "#ffffff",
         },
       }),
-      fetchPersonName(personaId),
+      isVisitor(user) ? Promise.resolve(null) : fetchPersonName(personaId),
     ]);
 
     res.set("Cache-Control", "no-store");
@@ -404,11 +444,16 @@ app.post("/validar", async (req, res) => {
     const personaId = String(info.personaId);
     const ref = db.ref(`usuarios/${personaId}`);
     const snapshot = await ref.once("value");
-    const storedName = snapshot.exists()
-      ? String(snapshot.val()?.nombre ?? "").trim() || null
+    const storedUser = snapshot.exists() ? snapshot.val() : null;
+    const storedName = storedUser
+      ? String(storedUser.nombre ?? "").trim() || null
       : null;
-    let institutionalName = snapshot.exists()
-      ? await currentPersonName(personaId, ref, storedName)
+    let institutionalName = storedUser
+      ? (
+          isVisitor(storedUser)
+            ? storedName
+            : await currentPersonName(personaId, ref, storedName)
+        )
       : await fetchPersonName(personaId);
 
     let user;
@@ -433,7 +478,7 @@ app.post("/validar", async (req, res) => {
       await ref.set(user);
       console.log(`Usuario Mi Pase registrado automáticamente: ${personaId}`);
     } else {
-      user = snapshot.val();
+      user = storedUser;
       if (institutionalName && institutionalName !== storedName) {
         user.nombre = institutionalName;
       }

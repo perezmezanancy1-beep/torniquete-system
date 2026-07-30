@@ -163,6 +163,15 @@
 
     .field { min-width: 0; }
     .field.wide { grid-column: 1 / -1; }
+    .validity-note {
+      padding: 11px 13px;
+      border: 1px solid #f0c8cf;
+      border-radius: 10px;
+      color: #7d1729;
+      background: #fff5f6;
+      font-size: 13px;
+      line-height: 1.45;
+    }
 
     label {
       display: block;
@@ -466,6 +475,28 @@
                   <option>TECNICO</option>
                 </select>
               </div>
+              <div class="field" id="visitorValidityAmountField" hidden>
+                <label for="visitorValidityAmount">Vigencia del acceso *</label>
+                <input
+                  id="visitorValidityAmount"
+                  type="number"
+                  min="1"
+                  step="1"
+                  value="7"
+                  inputmode="numeric"
+                >
+              </div>
+              <div class="field" id="visitorValidityUnitField" hidden>
+                <label for="visitorValidityUnit">Unidad *</label>
+                <select id="visitorValidityUnit">
+                  <option value="minutes">Minutos</option>
+                  <option value="hours" selected>Horas</option>
+                  <option value="days">Días</option>
+                </select>
+              </div>
+              <div class="field wide validity-note" id="visitorValidityPreview" hidden>
+                El acceso del visitante estará vigente hasta la fecha calculada.
+              </div>
               <div class="field wide">
                 <label for="carrera">Programa</label>
                 <select id="carrera"><option value="">Selecciona un nivel</option></select>
@@ -574,6 +605,7 @@
               <th>Identificación</th>
               <th>Nombre</th>
               <th>Tipo</th>
+              <th>Vigencia</th>
               <th>Huellas</th>
               <th style="text-align:right">Acciones</th>
             </tr>
@@ -708,6 +740,74 @@
       select.value = selected || "";
     }
 
+    function visitorDurationMs() {
+      const amount = Number(byId("visitorValidityAmount").value);
+      const multipliers = {
+        minutes: 60_000,
+        hours: 60 * 60_000,
+        days: 24 * 60 * 60_000
+      };
+      const multiplier = multipliers[byId("visitorValidityUnit").value];
+      if (!Number.isInteger(amount) || amount < 1 || !multiplier) return null;
+      const duration = amount * multiplier;
+      return duration <= 365 * 24 * 60 * 60_000 ? duration : null;
+    }
+
+    function formatExpiration(value) {
+      const expiration = Number(value);
+      if (!Number.isFinite(expiration) || expiration <= 0) return "Sin definir";
+      return new Intl.DateTimeFormat("es-CO", {
+        dateStyle: "medium",
+        timeStyle: "short",
+        timeZone: "America/Bogota"
+      }).format(new Date(expiration));
+    }
+
+    function updateVisitorValidityPreview() {
+      const duration = visitorDurationMs();
+      byId("visitorValidityPreview").textContent = duration
+        ? `Vigente hasta ${formatExpiration(Date.now() + duration)}.`
+        : "Ingresa una vigencia válida entre 1 minuto y 365 días.";
+    }
+
+    function toggleVisitorValidity() {
+      const visitor = byId("tipo").value === "VISITANTE";
+      [
+        "visitorValidityAmountField",
+        "visitorValidityUnitField",
+        "visitorValidityPreview"
+      ].forEach((id) => {
+        byId(id).hidden = !visitor;
+      });
+      byId("visitorValidityAmount").required = visitor;
+      byId("visitorValidityUnit").required = visitor;
+      if (visitor) updateVisitorValidityPreview();
+    }
+
+    function loadVisitorValidity(user) {
+      let minutes = Number(user?.duracionMinutos);
+      if (!Number.isFinite(minutes) || minutes < 1) {
+        const expiration = Number(user?.expiracion);
+        const start = Number(user?.inicio);
+        if (Number.isFinite(expiration) && Number.isFinite(start)) {
+          minutes = Math.max(1, Math.round((expiration - start) / 60_000));
+        } else {
+          minutes = 7 * 60;
+        }
+      }
+
+      if (minutes % (24 * 60) === 0) {
+        byId("visitorValidityAmount").value = minutes / (24 * 60);
+        byId("visitorValidityUnit").value = "days";
+      } else if (minutes % 60 === 0) {
+        byId("visitorValidityAmount").value = minutes / 60;
+        byId("visitorValidityUnit").value = "hours";
+      } else {
+        byId("visitorValidityAmount").value = minutes;
+        byId("visitorValidityUnit").value = "minutes";
+      }
+    }
+
     function clearForm() {
       byId("userForm").reset();
       editingId = null;
@@ -715,6 +815,7 @@
       byId("formTitle").textContent = "Registrar usuario";
       byId("cancelEdit").hidden = true;
       loadPrograms();
+      toggleVisitorValidity();
     }
 
     function editUser(user) {
@@ -727,6 +828,8 @@
       loadPrograms(user.carrera || "");
       byId("celular").value = user.celular || "";
       byId("correo").value = user.correo || "";
+      loadVisitorValidity(user);
+      toggleVisitorValidity();
       byId("formTitle").textContent = "Editar usuario";
       byId("cancelEdit").hidden = false;
       document.querySelector("#usuarios").scrollIntoView({ behavior: "smooth" });
@@ -765,7 +868,15 @@
 
       filtered.forEach((user) => {
         const row = document.createElement("tr");
-        [user.cedula, user.nombre || "", user.tipo || ""].forEach((value) => {
+        const validity = user.tipo === "VISITANTE"
+          ? formatExpiration(user.expiracion)
+          : "Institucional";
+        [
+          user.cedula,
+          user.nombre || "",
+          user.tipo || "",
+          validity
+        ].forEach((value) => {
           const cell = document.createElement("td");
           cell.textContent = value;
           row.appendChild(cell);
@@ -978,6 +1089,15 @@
       event.target.value = event.target.value.toUpperCase();
     });
     byId("nivel").addEventListener("change", () => loadPrograms());
+    byId("tipo").addEventListener("change", toggleVisitorValidity);
+    byId("visitorValidityAmount").addEventListener(
+      "input",
+      updateVisitorValidityPreview
+    );
+    byId("visitorValidityUnit").addEventListener(
+      "change",
+      updateVisitorValidityPreview
+    );
     byId("cancelEdit").addEventListener("click", clearForm);
     byId("search").addEventListener("input", renderUsers);
     byId("fingerprintPerson").addEventListener("change", refreshPersonPreview);
@@ -992,6 +1112,12 @@
         return;
       }
       const visitor = byId("tipo").value === "VISITANTE";
+      const durationMs = visitor ? visitorDurationMs() : null;
+      if (visitor && !durationMs) {
+        showToast("Ingresa una vigencia válida entre 1 minuto y 365 días.");
+        return;
+      }
+      const now = Date.now();
       const data = {
         nombre: byId("nombre").value.trim().toUpperCase(),
         tipo: byId("tipo").value,
@@ -999,7 +1125,10 @@
         carrera: byId("carrera").value,
         celular: byId("celular").value.trim(),
         correo: byId("correo").value.trim(),
-        expiracion: visitor ? Date.now() + 7 * 60 * 60 * 1000 : null
+        inicio: visitor ? now : null,
+        expiracion: visitor ? now + durationMs : null,
+        duracionMinutos: visitor ? Math.round(durationMs / 60_000) : null,
+        nombreManual: visitor ? true : null
       };
       if (!data.nombre || !data.tipo) {
         showToast("Completa el nombre y el tipo de usuario.");
@@ -1008,7 +1137,9 @@
       await db.ref(`usuarios/${id}`)[editingId ? "update" : "set"](data);
       if (visitor && data.celular) {
         const link = `https://torniquete-system.onrender.com/qr.html?cedula=${id}`;
-        const message = encodeURIComponent(`Acceso autorizado UAC\n${link}`);
+        const message = encodeURIComponent(
+          `Acceso autorizado UAC\nVigente hasta ${formatExpiration(data.expiracion)}\n${link}`
+        );
         window.open(`https://wa.me/57${data.celular}?text=${message}`, "_blank");
       }
       byId("okSound").play().catch(() => {});
@@ -1028,6 +1159,7 @@
     updateClock();
     setInterval(updateClock, 1000);
     loadPrograms();
+    toggleVisitorValidity();
   </script>
 </body>
 </html>
