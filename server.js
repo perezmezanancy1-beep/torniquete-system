@@ -599,21 +599,22 @@ app.post("/validar", async (req, res) => {
       });
     }
 
-    await ref.update({
-      estado,
-      ultimoMovimiento: registeredAt.toISOString(),
-      ultimoMovimientoTipo: tipo,
-      ultimoQRHash: currentQRHash,
-    });
-
-    await db.ref("historial").push({
-      cedula: personaId,
-      personaId: Number(personaId),
-      nombre: institutionalName || user.nombre || "Usuario",
-      tipo,
-      fecha: registeredAt.toISOString(),
-      origen: "QR_MIPASE",
-    });
+    await Promise.all([
+      ref.update({
+        estado,
+        ultimoMovimiento: registeredAt.toISOString(),
+        ultimoMovimientoTipo: tipo,
+        ultimoQRHash: currentQRHash,
+      }),
+      db.ref("historial").push({
+        cedula: personaId,
+        personaId: Number(personaId),
+        nombre: institutionalName || user.nombre || "Usuario",
+        tipo,
+        fecha: registeredAt.toISOString(),
+        origen: "QR_MIPASE",
+      }),
+    ]);
 
     return res.json({
       ok: true,
