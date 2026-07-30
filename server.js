@@ -19,6 +19,7 @@ const {
   isVisitor,
   isVisitorAccessActive,
 } = require("./visitor");
+const { recentMovementBlock } = require("./movement");
 
 const MOVEMENT_COOLDOWN_MS = 10_000;
 const FINGERPRINT_COMMAND_TTL_MS = 2 * 60_000;
@@ -434,14 +435,6 @@ app.post("/validar", async (req, res) => {
     }
 
     const info = validation.info;
-    if (!(await claimTokenOnce(info))) {
-      return res.status(409).json({
-        ok: false,
-        error: "TOKEN_YA_UTILIZADO",
-        mensaje: "Este código QR ya fue utilizado.",
-      });
-    }
-
     const personaId = String(info.personaId);
     const ref = db.ref(`usuarios/${personaId}`);
     const snapshot = await ref.once("value");
@@ -503,33 +496,42 @@ app.post("/validar", async (req, res) => {
     }
 
     const registeredAt = new Date();
-    const lastMovementAt = new Date(user.ultimoMovimiento);
-    const lastMovementMs = lastMovementAt.getTime();
-    const movementAgeMs = registeredAt.getTime() - lastMovementMs;
-    const lastMovementType = user.ultimoMovimientoTipo;
-
-    if (
-      Number.isFinite(lastMovementMs) &&
-      movementAgeMs >= 0 &&
-      movementAgeMs < MOVEMENT_COOLDOWN_MS &&
-      (lastMovementType === "entrada" || lastMovementType === "salida")
-    ) {
-      const movementLabel =
-        lastMovementType === "entrada" ? "entrada" : "salida";
+    const recentBlock = recentMovementBlock(
+      user,
+      registeredAt.getTime(),
+      MOVEMENT_COOLDOWN_MS
+    );
+    if (recentBlock) {
       return res.status(409).json({
         ok: false,
         error: "MOVIMIENTO_RECIENTE",
-        tipo: lastMovementType,
-        mensaje: `La ${movementLabel} ya fue registrada.`,
+        tipo: recentBlock.lastType,
+        proximoTipo: recentBlock.nextType,
+        reintentarEnSegundos: recentBlock.retryAfterSeconds,
+        mensaje:
+          `Espere ${recentBlock.retryAfterSeconds} segundos para registrar ` +
+          `la ${recentBlock.nextType}.`,
       });
     }
 
+    const lastMovementAt = new Date(user.ultimoMovimiento);
+    const lastMovementMs = lastMovementAt.getTime();
     const stateIsFromToday =
       Number.isFinite(lastMovementMs) &&
       colombiaDateKey(lastMovementAt) === colombiaDateKey(registeredAt);
     const tipo =
       user.estado === "dentro" && stateIsFromToday ? "salida" : "entrada";
     const estado = tipo === "entrada" ? "dentro" : "fuera";
+
+    // El token solo se consume cuando todas las reglas permiten registrar
+    // el movimiento. Un intento durante el enfriamiento puede reintentarse.
+    if (!(await claimTokenOnce(info))) {
+      return res.status(409).json({
+        ok: false,
+        error: "TOKEN_YA_UTILIZADO",
+        mensaje: "Este código QR ya fue utilizado.",
+      });
+    }
 
     await ref.update({
       estado,

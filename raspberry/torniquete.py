@@ -329,6 +329,29 @@ def process_authorized_access(data):
     )
 
 
+def movement_retry_voice(data):
+    next_movement = data.get("proximoTipo")
+    try:
+        seconds = int(data.get("reintentarEnSegundos"))
+    except (TypeError, ValueError):
+        seconds = 0
+    if (
+        next_movement in ("entrada", "salida")
+        and 1 <= seconds <= 10
+    ):
+        return (
+            f"Espere {seconds} segundos para registrar "
+            f"la {next_movement}"
+        )
+
+    movement = data.get("tipo")
+    if movement == "entrada":
+        return "La entrada ya fue registrada"
+    if movement == "salida":
+        return "La salida ya fue registrada"
+    return "El movimiento ya fue registrado"
+
+
 def validate_qr(token):
     """Envía exactamente el token leído; la Raspberry nunca descifra."""
     try:
@@ -353,13 +376,7 @@ def validate_qr(token):
         elif error_code == "TOKEN_YA_UTILIZADO":
             enqueue_voice("Este código QR ya fue utilizado")
         elif error_code == "MOVIMIENTO_RECIENTE":
-            movement = data.get("tipo")
-            if movement == "entrada":
-                enqueue_voice("La entrada ya fue registrada")
-            elif movement == "salida":
-                enqueue_voice("La salida ya fue registrada")
-            else:
-                enqueue_voice("El movimiento ya fue registrado")
+            enqueue_voice(movement_retry_voice(data))
         else:
             enqueue_voice("Acceso denegado")
     except requests.RequestException as error:

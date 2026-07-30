@@ -172,6 +172,20 @@ class FingerprintFlowTests(unittest.TestCase):
 
         self.assertNotEqual(old_path, new_path)
 
+    def test_announces_retry_time_and_next_qr_movement(self):
+        message = self.module.movement_retry_voice(
+            {
+                "tipo": "salida",
+                "proximoTipo": "entrada",
+                "reintentarEnSegundos": 5,
+            }
+        )
+
+        self.assertEqual(
+            message,
+            "Espere 5 segundos para registrar la entrada",
+        )
+
     def test_reads_primary_plural_and_legacy_fingerprint_positions(self):
         positions = self.module.fingerprint_positions(
             {
